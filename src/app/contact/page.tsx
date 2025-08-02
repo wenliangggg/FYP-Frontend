@@ -16,7 +16,7 @@ export default function ContactPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-800 mb-1">Message</label>
-            <textarea className="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-pink-400 focus:border-pink-400" rows="4" placeholder="Type your message..." />
+            <textarea className="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-pink-400 focus:border-pink-400" rows={4} placeholder="Type your message..." />
           </div>
           <button type="submit" className="bg-pink-600 text-white font-semibold px-6 py-2 rounded-md hover:bg-pink-700 transition">
             Send Message
