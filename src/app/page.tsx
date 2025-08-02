@@ -1,103 +1,103 @@
-import Image from "next/image";
+import Head from "next/head";
 
 export default function Home() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <>
+      <Head>
+        <title>Kidly – Smart Book & Video Picks for Kids</title>
+        <meta name="description" content="Discover fun, educational books and videos recommended just for your kids!" />
+      </Head>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
+      <main className="bg-white text-gray-800 font-sans">
+        {/* Hero */}
+        <section className="bg-gradient-to-r from-pink-400 to-yellow-300 py-20 px-6 text-center">
+          <div className="max-w-5xl mx-auto">
+            <h1 className="text-4xl md:text-6xl font-extrabold text-white drop-shadow-md">
+              Discover the Best Books & Videos for Kids
+            </h1>
+            <p className="text-lg md:text-xl mt-4 text-white">
+              Kidly helps parents and teachers find safe, fun, and educational content tailored to children.
+            </p>
+            <div className="mt-8 flex justify-center space-x-4">
+              <button className="bg-white text-pink-600 font-bold px-6 py-3 rounded-full shadow hover:bg-pink-100 transition">
+                Explore Recommendations
+              </button>
+              <button className="bg-yellow-100 text-yellow-800 font-bold px-6 py-3 rounded-full shadow hover:bg-yellow-200 transition">
+                How It Works
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* Video Section */}
+        <section className="py-16 px-6 bg-white text-center">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl font-bold mb-6">Watch Kidly in Action</h2>
+            <p className="mb-8 text-gray-600">See how Kidly recommends age-appropriate books and videos for your child.</p>
+            <div className="aspect-w-16 aspect-h-9 w-full">
+              <iframe
+                className="w-full h-72 md:h-[480px] rounded-lg shadow-lg"
+                src=""
+                title="Kidly Demo Video"
+                allowFullScreen
+              ></iframe>
+            </div>
+          </div>
+        </section>
+
+        {/* Features */}
+        <section className="py-20 px-6 bg-gray-50">
+          <div className="max-w-6xl mx-auto text-center">
+            <h2 className="text-3xl font-bold mb-10">Why Parents Love Kidly</h2>
+            <div className="grid md:grid-cols-3 gap-8 text-left">
+              <div className="bg-white p-6 rounded-xl shadow hover:shadow-md transition">
+                <h3 className="text-xl font-semibold mb-2">Age-Appropriate Picks</h3>
+                <p>All recommendations are carefully selected based on your child's age and interests.</p>
+              </div>
+              <div className="bg-white p-6 rounded-xl shadow hover:shadow-md transition">
+                <h3 className="text-xl font-semibold mb-2">Educational & Fun</h3>
+                <p>Every book and video promotes creativity, learning, and kindness.</p>
+              </div>
+              <div className="bg-white p-6 rounded-xl shadow hover:shadow-md transition">
+                <h3 className="text-xl font-semibold mb-2">Trusted by Parents</h3>
+                <p>Built with safety and care, Kidly is loved by thousands of families worldwide.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Reviews Section */}
+        <section className="bg-pink-50 py-16 px-6">
+          <div className="max-w-6xl mx-auto text-center">
+            <h2 className="text-3xl font-bold mb-10">What Parents Are Saying</h2>
+            <div className="grid md:grid-cols-3 gap-6">
+              <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition">
+                <p className="italic mb-3">“Kidly made screen time guilt-free. My son loves the videos, and I love the learning!”</p>
+                <p className="font-bold text-sm text-gray-700">– Sarah, mom of 1</p>
+              </div>
+              <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition">
+                <p className="italic mb-3">“We’ve discovered so many great books. It’s like having a digital librarian at home!”</p>
+                <p className="font-bold text-sm text-gray-700">– James, dad of 3</p>
+              </div>
+              <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition">
+                <p className="italic mb-3">“Perfect for teachers! I use Kidly to recommend content to my students every week.”</p>
+                <p className="font-bold text-sm text-gray-700">– Ms. Tan, primary school teacher</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* CTA */}
+        <section className="bg-indigo-500 text-white py-20 px-6">
+          <div className="max-w-4xl mx-auto text-center">
+            <h2 className="text-3xl font-bold mb-4">Start Exploring with Your Kids Today</h2>
+            <p className="mb-6 text-lg">It’s free to get started – no credit card needed.</p>
+            <button className="bg-white text-indigo-600 font-semibold px-8 py-3 rounded-full hover:bg-indigo-100 transition">
+              Get Started for Free
+            </button>
+          </div>
+        </section>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+    </>
   );
 }
