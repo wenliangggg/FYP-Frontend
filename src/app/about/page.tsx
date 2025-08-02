@@ -17,7 +17,7 @@ export default function AboutPage() {
 
           <h2 className="text-2xl font-semibold text-pink-500 mb-4 mt-6">Why We Built Kidly</h2>
           <p className="text-gray-700">
-            Choosing the right content for children shouldn't be overwhelming. Kidly uses simple filters and smart suggestions 
+            Choosing the right content for children shouldn&#39t be overwhelming. Kidly uses simple filters and smart suggestions 
             to take the guesswork out of discovering amazing books and videos for every stage of childhood.
           </p>
         </div>

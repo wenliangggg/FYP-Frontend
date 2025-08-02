@@ -52,7 +52,7 @@ export default function Home() {
             <div className="grid md:grid-cols-3 gap-8 text-left">
               <div className="bg-white p-6 rounded-xl shadow hover:shadow-md transition">
                 <h3 className="text-xl font-semibold mb-2">Age-Appropriate Picks</h3>
-                <p>All recommendations are carefully selected based on your child's age and interests.</p>
+                <p>All recommendations are carefully selected based on your child&#39s age and interests.</p>
               </div>
               <div className="bg-white p-6 rounded-xl shadow hover:shadow-md transition">
                 <h3 className="text-xl font-semibold mb-2">Educational & Fun</h3>

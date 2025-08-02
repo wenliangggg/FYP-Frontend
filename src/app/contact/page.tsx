@@ -3,7 +3,7 @@ export default function ContactPage() {
     <section className="bg-white py-20 px-6">
       <div className="max-w-xl mx-auto text-center">
         <h1 className="text-4xl md:text-5xl font-bold text-pink-600 mb-6">Contact Us</h1>
-        <p className="text-gray-700 mb-8">Have questions or feedback? We'd love to hear from you!</p>
+        <p className="text-gray-700 mb-8">Have questions or feedback? We&#39d love to hear from you!</p>
 
         <form className="bg-white p-6 rounded-xl shadow-md text-left space-y-4 border border-gray-200">
           <div>
