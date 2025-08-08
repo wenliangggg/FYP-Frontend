@@ -5,7 +5,7 @@ import Link from 'next/link';
 export default function Navbar() {
   return (
     <nav className="bg-white shadow px-6 py-4 flex justify-between">
-      <div className="text-xl font-bold text-pink-500">Kidly</div>
+      <div className="text-xl font-bold text-pink-500">KidFlix</div>
       <div className="space-x-6">
         <Link href="/" className="text-gray-700 hover:text-pink-500">Home</Link>
         <Link href="/about" className="text-gray-700 hover:text-pink-500">About</Link>
