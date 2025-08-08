@@ -35,12 +35,12 @@ export default function Home() {
             <h2 className="text-3xl font-bold mb-6">Watch KidFlix in Action</h2>
             <p className="mb-8 text-gray-600">See how KidFlix recommends age-appropriate books and videos for your child.</p>
             <div className="aspect-w-16 aspect-h-9 w-full">
-              <iframe
+              {/* <iframe
                 className="w-full h-72 md:h-[480px] rounded-lg shadow-lg"
                 src=""
                 title="KidFlix Demo Video"
                 allowFullScreen
-              ></iframe>
+              ></iframe> */}
             </div>
           </div>
         </section>
