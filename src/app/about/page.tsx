@@ -2,24 +2,69 @@ export default function AboutPage() {
   return (
     <section className="bg-white py-20 px-6">
       <div className="max-w-4xl mx-auto text-center">
-        <h1 className="text-4xl md:text-5xl font-bold mb-6 text-pink-600">About KidFlix</h1>
-        <p className="text-lg text-gray-700 mb-6">
-          KidFlix is a smart recommendation platform that helps parents and teachers discover the best books and videos for children.
-          Whether it’s story time or screen time, we ensure the content is safe, fun, and educational.
+        {/* Hero Section */}
+        <h1 className="text-4xl font-bold text-pink-600 mb-4">About KidFlix</h1>
+        <p className="text-gray-700 text-lg mb-12">
+          Making Learning Fun for Every Child
         </p>
 
-        <div className="bg-pink-50 p-6 md:p-10 rounded-xl shadow text-left">
-          <h2 className="text-2xl font-semibold text-pink-500 mb-4">Our Mission</h2>
-          <p className="text-gray-700 mb-4">
-            We believe in fostering curiosity, creativity, and kindness through age-appropriate media.
-            With KidFlix, families and educators can trust that every recommendation supports healthy development.
-          </p>
-
-          <h2 className="text-2xl font-semibold text-pink-500 mb-4 mt-6">Why We Built KidFlix</h2>
+        {/* Mission */}
+        <div className="bg-pink-50 p-8 rounded-xl shadow-sm mb-12">
+          <h2 className="text-2xl font-semibold text-pink-600 mb-3">Our Mission</h2>
           <p className="text-gray-700">
-            Choosing the right content for children shouldn&#39t be overwhelming. KidFlix uses simple filters and smart suggestions 
-            to take the guesswork out of discovering amazing books and videos for every stage of childhood.
+            At KidFlix, we believe in combining entertainment with education.
+            Our mission is to provide safe, age-appropriate, and fun content
+            that helps kids learn and grow in a secure online space.
           </p>
+        </div>
+
+        {/* Our Story */}
+        <div className="text-left mb-12">
+          <h2 className="text-2xl font-semibold text-pink-600 mb-3">Our Story</h2>
+          <p className="text-gray-700 mb-4">
+            KidFlix was born out of a simple idea — to create a safe and engaging
+            space where children can explore books and videos that inspire them.
+            As parents and educators, we wanted a platform that kids would love
+            while giving parents peace of mind.
+          </p>
+          <p className="text-gray-700">
+            Today, KidFlix helps children around the world discover new interests
+            through personalized recommendations and interactive learning.
+          </p>
+        </div>
+
+        {/* What Makes Us Special */}
+        <div className="grid md:grid-cols-2 gap-6 mb-12">
+          <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+            <h3 className="font-semibold text-pink-600 mb-2">Personalized Content</h3>
+            <p className="text-gray-700">Recommendations tailored to each child’s age and interests.</p>
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+            <h3 className="font-semibold text-pink-600 mb-2">Safe Environment</h3>
+            <p className="text-gray-700">Every book and video is reviewed for safety and appropriateness.</p>
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+            <h3 className="font-semibold text-pink-600 mb-2">Interactive Chatbot</h3>
+            <p className="text-gray-700">A friendly assistant helps kids find what they’re looking for.</p>
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+            <h3 className="font-semibold text-pink-600 mb-2">Parental Controls</h3>
+            <p className="text-gray-700">Tools for parents to monitor and guide their child’s experience.</p>
+          </div>
+        </div>
+
+        {/* Call to Action */}
+        <div className="bg-pink-100 p-8 rounded-xl shadow-md">
+          <h2 className="text-2xl font-bold text-pink-600 mb-3">Join KidFlix Today</h2>
+          <p className="text-gray-700 mb-6">
+            Create a free account and start exploring a world of fun and learning for your kids.
+          </p>
+          <a
+            href="/register"
+            className="bg-pink-600 text-white font-semibold px-6 py-2 rounded-md hover:bg-pink-700 transition"
+          >
+            Get Started
+          </a>
         </div>
       </div>
     </section>
