@@ -1,103 +1,129 @@
-import Head from "next/head";
+import { FaBook, FaVideo, FaRobot } from "react-icons/fa";
+import { MdSecurity } from "react-icons/md";
 
-export default function Home() {
+export default function LandingPage() {
   return (
-    <>
-      <Head>
-        <title>KidFlix – Smart Book & Video Picks for Kids</title>
-        <meta name="description" content="Discover fun, educational books and videos recommended just for your kids!" />
-      </Head>
+    <main className="bg-white">
+      {/* Hero Section */}
+      <section className="text-center py-20 px-6 bg-pink-50">
+        <h1 className="text-5xl font-bold text-pink-600 mb-4">
+          Welcome to KidFlix
+        </h1>
+        <p className="text-lg text-gray-700 max-w-2xl mx-auto mb-6">
+          Fun, safe, and smart recommendations for kids! Discover books, videos,
+          and stories picked just for your little ones.
+        </p>
+        <a
+          href="/register"
+          className="bg-pink-600 text-white font-semibold px-6 py-3 rounded-md hover:bg-pink-700 transition"
+        >
+          Get Started Free
+        </a>
+      </section>
 
-      <main className="bg-white text-gray-800 font-sans">
-        {/* Hero */}
-        <section className="bg-gradient-to-r from-pink-400 to-yellow-300 py-20 px-6 text-center">
-          <div className="max-w-5xl mx-auto">
-            <h1 className="text-4xl md:text-6xl font-extrabold text-white drop-shadow-md">
-              Discover the Best Books & Videos for Kids
-            </h1>
-            <p className="text-lg md:text-xl mt-4 text-white">
-              KidFlix helps parents and teachers find safe, fun, and educational content tailored to children.
+      {/* Features Section */}
+      <section className="max-w-6xl mx-auto py-16 px-6 grid md:grid-cols-4 gap-8 text-center">
+        <div>
+          <FaBook className="text-pink-600 text-4xl mx-auto mb-4" />
+          <h3 className="text-lg block text-sm font-semibold text-gray-800 mb-2">Curated Books</h3>
+          <p className="text-gray-900">
+            Hand-picked reading for every age group, from toddlers to teens.
+          </p>
+        </div>
+        <div>
+          <FaVideo className="text-pink-600 text-4xl mx-auto mb-4" />
+          <h3 className="text-lg block text-sm font-semibold text-gray-800 mb-2">Kid-Friendly Videos</h3>
+          <p className="text-gray-900">
+            Educational and entertaining videos to keep kids engaged.
+          </p>
+        </div>
+        <div>
+          <FaRobot className="text-pink-600 text-4xl mx-auto mb-4" />
+          <h3 className="text-lg block text-sm font-semibold text-gray-800 mb-2">Smart Chatbot</h3>
+          <p className="text-gray-900">
+            Ask our kid-safe AI for book and video suggestions anytime.
+          </p>
+        </div>
+        <div>
+          <MdSecurity className="text-pink-600 text-4xl mx-auto mb-4" />
+          <h3 className="text-lg block text-sm font-semibold text-gray-800 mb-2">Safe & Secure</h3>
+          <p className="text-gray-900">
+            Fully moderated and parent-approved recommendations.
+          </p>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section className="bg-pink-50 py-16 px-6">
+        <h2 className="text-3xl font-bold text-center text-pink-600 mb-10">
+          How It Works
+        </h2>
+        <div className="max-w-4xl mx-auto grid md:grid-cols-3 gap-8 text-center">
+          <div>
+            <div className="bg-pink-600 text-white w-12 h-12 flex items-center justify-center rounded-full mx-auto mb-4">
+              1
+            </div>
+            <h4 className="block text-sm font-semibold text-gray-800 mb-2">Sign Up</h4>
+            <p className="text-gray-900">
+              Create a free account in minutes.
             </p>
-            <div className="mt-8 flex justify-center space-x-4">
-              <button className="bg-white text-pink-600 font-bold px-6 py-3 rounded-full shadow hover:bg-pink-100 transition">
-                Explore Recommendations
-              </button>
-              <button className="bg-yellow-100 text-yellow-800 font-bold px-6 py-3 rounded-full shadow hover:bg-yellow-200 transition">
-                How It Works
-              </button>
+          </div>
+          <div>
+            <div className="bg-pink-600 text-white w-12 h-12 flex items-center justify-center rounded-full mx-auto mb-4">
+              2
             </div>
+            <h4 className="block text-sm font-semibold text-gray-800 mb-2">Tell Us Your Interests</h4>
+            <p className="text-gray-900">
+              Select your child’s age and favorite topics.
+            </p>
           </div>
-        </section>
-
-        {/* Video Section */}
-        <section className="py-16 px-6 bg-white text-center">
-          <div className="max-w-4xl mx-auto">
-            <h2 className="text-3xl font-bold mb-6">Watch KidFlix in Action</h2>
-            <p className="mb-8 text-gray-600">See how KidFlix recommends age-appropriate books and videos for your child.</p>
-            <div className="aspect-w-16 aspect-h-9 w-full">
-              {/* <iframe
-                className="w-full h-72 md:h-[480px] rounded-lg shadow-lg"
-                src=""
-                title="KidFlix Demo Video"
-                allowFullScreen
-              ></iframe> */}
+          <div>
+            <div className="bg-pink-600 text-white w-12 h-12 flex items-center justify-center rounded-full mx-auto mb-4">
+              3
             </div>
+            <h4 className="block text-sm font-semibold text-gray-800 mb-2">Enjoy Recommendations</h4>
+            <p className="text-gray-900">
+              Get tailored book and video suggestions instantly.
+            </p>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* Features */}
-        <section className="py-20 px-6 bg-gray-50">
-          <div className="max-w-6xl mx-auto text-center">
-            <h2 className="text-3xl font-bold mb-10">Why Parents Love KidFlix</h2>
-            <div className="grid md:grid-cols-3 gap-8 text-left">
-              <div className="bg-white p-6 rounded-xl shadow hover:shadow-md transition">
-                <h3 className="text-xl font-semibold mb-2">Age-Appropriate Picks</h3>
-                <p>All recommendations are carefully selected based on your child&#39s age and interests.</p>
-              </div>
-              <div className="bg-white p-6 rounded-xl shadow hover:shadow-md transition">
-                <h3 className="text-xl font-semibold mb-2">Educational & Fun</h3>
-                <p>Every book and video promotes creativity, learning, and kindness.</p>
-              </div>
-              <div className="bg-white p-6 rounded-xl shadow hover:shadow-md transition">
-                <h3 className="text-xl font-semibold mb-2">Trusted by Parents</h3>
-                <p>Built with safety and care, KidFlix is loved by thousands of families worldwide.</p>
-              </div>
-            </div>
+      {/* Testimonials */}
+      <section className="max-w-6xl mx-auto py-16 px-6">
+        <h2 className="text-3xl font-bold text-center text-pink-600 mb-10">
+          What Parents Say
+        </h2>
+        <div className="grid md:grid-cols-3 gap-8">
+          <div className="p-6 bg-white rounded-xl shadow text-center">
+            <p className="text-gray-700 italic">
+              “KidFlix has made finding safe content so easy! My kids love it.”
+            </p>
+            <p className="mt-4 font-semibold">– Sarah L.</p>
           </div>
-        </section>
+          <div className="p-6 bg-white rounded-xl shadow text-center">
+            <p className="text-gray-700 italic">
+              “Finally, a platform I can trust for my children’s media.”
+            </p>
+            <p className="mt-4 font-semibold">– Daniel R.</p>
+          </div>
+          <div className="p-6 bg-white rounded-xl shadow text-center">
+            <p className="text-gray-700 italic">
+              “My kids ask the chatbot for new stories every day!”
+            </p>
+            <p className="mt-4 font-semibold">– Maria K.</p>
+          </div>
+        </div>
+      </section>
 
-        {/* Reviews Section */}
-        <section className="bg-pink-50 py-16 px-6">
-          <div className="max-w-6xl mx-auto text-center">
-            <h2 className="text-3xl font-bold mb-10">What Parents Are Saying</h2>
-            <div className="grid md:grid-cols-3 gap-6">
-              <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition">
-                <p className="italic mb-3">KidFlix made screen time guilt-free. My son loves the videos, and I love the learning!”</p>
-                <p className="font-bold text-sm text-gray-700">– Sarah, mom of 1</p>
-              </div>
-              <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition">
-                <p className="italic mb-3">“We’ve discovered so many great books. It’s like having a digital librarian at home!”</p>
-                <p className="font-bold text-sm text-gray-700">– James, dad of 3</p>
-              </div>
-              <div className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition">
-                <p className="italic mb-3">“Perfect for teachers! I use KidFlix to recommend content to my students every week.”</p>
-                <p className="font-bold text-sm text-gray-700">– Ms. Tan, primary school teacher</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* CTA */}
-        <section className="bg-indigo-500 text-white py-20 px-6">
-          <div className="max-w-4xl mx-auto text-center">
-            <h2 className="text-3xl font-bold mb-4">Start Exploring with Your Kids Today</h2>
-            <p className="mb-6 text-lg">It’s free to get started – no credit card needed.</p>
-            <button className="bg-white text-indigo-600 font-semibold px-8 py-3 rounded-full hover:bg-indigo-100 transition">
-              Get Started for Free
-            </button>
-          </div>
-        </section>
-      </main>
-    </>
+      {/* Footer */}
+      <footer className="bg-pink-600 text-white text-center py-6 mt-10">
+        <p>© 2025 KidFlix. All rights reserved.</p>
+        <div className="mt-2 space-x-4">
+          <a href="#" className="hover:underline">Privacy Policy</a>
+          <a href="#" className="hover:underline">Terms of Service</a>
+        </div>
+      </footer>
+    </main>
   );
 }
