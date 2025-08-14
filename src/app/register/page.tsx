@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { auth } from "@/lib/firebase"; // adjust path if needed
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from "firebase/auth";
+import { auth } from "@/lib/firebase"; 
 import { EyeIcon, EyeOffIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
   const [fullName, setFullName] = useState("");
@@ -13,6 +14,8 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  
+  const router = useRouter();
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
@@ -23,16 +26,19 @@ export default function RegisterPage() {
     }
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
 
       await updateProfile(userCredential.user, { displayName: fullName });
+      await sendEmailVerification(userCredential.user);
 
-      console.log("User registered:", userCredential.user);
-      alert("Registration successful!");
+      alert("Registration successful! Please check your email to verify your account.");
+      
+      // Force sign-out so they are not logged in
+      await auth.signOut();
+
+      // Redirect to login page
+      router.push("/login");
+
     } catch (error: any) {
       console.error("Error:", error.message);
       alert(error.message);
