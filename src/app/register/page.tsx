@@ -1,8 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from "firebase/auth";
-import { auth } from "@/lib/firebase"; 
+import {
+  createUserWithEmailAndPassword,
+  updateProfile,
+  sendEmailVerification,
+} from "firebase/auth";
+import { auth, db } from "@/lib/firebase"; // Ensure db is exported in firebase config
+import { doc, setDoc } from "firebase/firestore";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -14,7 +19,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordError, setPasswordError] = useState("");
-  
+
   const router = useRouter();
 
   const handleSubmit = async (e: any) => {
@@ -26,19 +31,39 @@ export default function RegisterPage() {
     }
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // 1️⃣ Create user
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+      const user = userCredential.user;
 
-      await updateProfile(userCredential.user, { displayName: fullName });
-      await sendEmailVerification(userCredential.user);
+      // 2️⃣ Update profile with full name
+      await updateProfile(user, { displayName: fullName });
 
-      alert("Registration successful! Please check your email to verify your account.");
-      
-      // Force sign-out so they are not logged in
+      // 3️⃣ Send email verification
+      await sendEmailVerification(user);
+
+      // 4️⃣ Save user to Firestore with role
+      await setDoc(doc(db, "users", user.uid), {
+        uid: user.uid,
+        fullName: fullName,
+        email: user.email,
+        role: "user", // ✅ default role
+        createdAt: new Date(),
+        emailVerified: user.emailVerified,
+      });
+
+      alert(
+        "Registration successful! Please check your email to verify your account."
+      );
+
+      // 5️⃣ Sign out so they must verify before login
       await auth.signOut();
 
-      // Redirect to login page
+      // 6️⃣ Redirect to login
       router.push("/login");
-
     } catch (error: any) {
       console.error("Error:", error.message);
       alert(error.message);
@@ -68,7 +93,8 @@ export default function RegisterPage() {
       <div className="max-w-md mx-auto text-center">
         <h1 className="text-4xl font-bold text-pink-600 mb-6">Register</h1>
         <p className="text-gray-700 mb-6">
-          Create a free KidFlix account to get personalized content for your kids.
+          Create a free KidFlix account to get personalized content for your
+          kids.
         </p>
 
         <form
@@ -125,7 +151,11 @@ export default function RegisterPage() {
               className="absolute right-3 top-9 text-gray-500"
               onClick={() => setShowPassword(!showPassword)}
             >
-              {showPassword ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
+              {showPassword ? (
+                <EyeOffIcon size={20} />
+              ) : (
+                <EyeIcon size={20} />
+              )}
             </button>
           </div>
 
@@ -147,9 +177,15 @@ export default function RegisterPage() {
             <button
               type="button"
               className="absolute right-3 top-9 text-gray-500"
-              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              onClick={() =>
+                setShowConfirmPassword(!showConfirmPassword)
+              }
             >
-              {showConfirmPassword ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
+              {showConfirmPassword ? (
+                <EyeOffIcon size={20} />
+              ) : (
+                <EyeIcon size={20} />
+              )}
             </button>
           </div>
 
@@ -173,9 +209,13 @@ export default function RegisterPage() {
 
         <p className="mt-4 text-sm text-gray-600">
           Already have an account?{" "}
-          <a href="/login" className="text-pink-600 font-semibold hover:underline">
+          <a
+            href="/login"
+            className="text-pink-600 font-semibold hover:underline"
+          >
             Log in
-          </a>.
+          </a>
+          .
         </p>
       </div>
     </section>
