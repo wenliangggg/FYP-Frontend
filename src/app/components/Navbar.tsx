@@ -2,15 +2,22 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { auth } from "@/lib/firebase"; // adjust path to your firebase config
+import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 
 export default function Navbar() {
   const [user, setUser] = useState<User | null>(null);
+  const [emailVerified, setEmailVerified] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+      if (currentUser) {
+        setUser(currentUser);
+        setEmailVerified(currentUser.emailVerified);
+      } else {
+        setUser(null);
+        setEmailVerified(false);
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -31,6 +38,10 @@ export default function Navbar() {
         <Link href="/about" className="text-gray-700 hover:text-pink-500">About</Link>
         <Link href="/contact" className="text-gray-700 hover:text-pink-500">Contact</Link>
 
+        {user && emailVerified && (
+          <Link href="/review" className="text-gray-700 hover:text-pink-500">Reviews</Link>
+        )}
+
         {!user ? (
           <>
             <Link href="/login" className="text-gray-700 hover:text-pink-500">Login</Link>
@@ -38,13 +49,21 @@ export default function Navbar() {
           </>
         ) : (
           <>
-            <span className="text-gray-600 text-sm">Hi, {user.email}</span>
-            <button
-              onClick={handleLogout}
-              className="bg-pink-500 text-white px-3 py-1 rounded hover:bg-pink-600"
-            >
-              Logout
-            </button>
+            {emailVerified ? (
+              <>
+                <span className="text-gray-600 text-sm">Hi, {user.email}</span>
+                <button
+                  onClick={handleLogout}
+                  className="bg-pink-500 text-white px-3 py-1 rounded hover:bg-pink-600"
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <span className="text-red-500 text-sm">
+                Please verify your email.
+              </span>
+            )}
           </>
         )}
       </div>
