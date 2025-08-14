@@ -1,7 +1,42 @@
+'use client';
+
 import { FaBook, FaVideo, FaRobot } from "react-icons/fa";
 import { MdSecurity } from "react-icons/md";
+import { useState, useEffect } from "react";
+import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
+interface Review {
+  id?: string;
+  userName: string;
+  message: string;
+  rating: number;
+  createdAt: any;
+}
 
 export default function LandingPage() {
+  const [reviews, setReviews] = useState<Review[]>([]);
+
+  // Fetch latest 3 reviews for testimonials
+  const fetchReviews = async () => {
+    try {
+      const reviewsRef = collection(db, "reviews");
+      const q = query(reviewsRef, orderBy("createdAt", "desc"), limit(3));
+      const snapshot = await getDocs(q);
+      const reviewsList = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...(doc.data() as Review),
+      }));
+      setReviews(reviewsList);
+    } catch (err) {
+      console.error("Error fetching reviews:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchReviews();
+  }, []);
+
   return (
     <main className="bg-white">
       {/* Hero Section */}
@@ -20,7 +55,7 @@ export default function LandingPage() {
           Get Started Free
         </a>
       </section>
-
+      
       {/* Features Section */}
       <section className="max-w-6xl mx-auto py-16 px-6 grid md:grid-cols-4 gap-8 text-center">
         <div>
@@ -89,34 +124,27 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Testimonials */}
+      {/* Testimonials Section */}
       <section className="max-w-6xl mx-auto py-16 px-6">
         <h2 className="text-3xl font-bold text-center text-pink-600 mb-10">
           What Parents Say
         </h2>
-        <div className="grid md:grid-cols-3 gap-8">
-          <div className="p-6 bg-white rounded-xl shadow text-center">
-            <p className="text-gray-700 italic">
-              “KidFlix has made finding safe content so easy! My kids love it.”
-            </p>
-            <p className="mt-4 font-semibold">– Sarah L.</p>
+
+        {reviews.length === 0 ? (
+          <p className="text-center text-gray-600">No reviews yet. Be the first to review!</p>
+        ) : (
+          <div className="grid md:grid-cols-3 gap-8">
+            {reviews.map((rev) => (
+              <div key={rev.id} className="p-6 bg-white rounded-xl shadow text-center">
+                <p className="text-gray-700 italic">“{rev.message}”</p>
+                <p className="mt-4 font-semibold">– {rev.userName}</p>
+              </div>
+            ))}
           </div>
-          <div className="p-6 bg-white rounded-xl shadow text-center">
-            <p className="text-gray-700 italic">
-              “Finally, a platform I can trust for my children’s media.”
-            </p>
-            <p className="mt-4 font-semibold">– Daniel R.</p>
-          </div>
-          <div className="p-6 bg-white rounded-xl shadow text-center">
-            <p className="text-gray-700 italic">
-              “My kids ask the chatbot for new stories every day!”
-            </p>
-            <p className="mt-4 font-semibold">– Maria K.</p>
-          </div>
-        </div>
+        )}
       </section>
 
-      {/* Footer */}
+      {/* Footer Section */}
       <footer className="bg-pink-600 text-white text-center py-6 mt-10">
         <p>© 2025 KidFlix. All rights reserved.</p>
         <div className="mt-2 space-x-4">
