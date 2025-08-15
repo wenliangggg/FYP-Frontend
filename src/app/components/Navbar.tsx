@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { FiSettings } from "react-icons/fi";
 
 export default function Navbar() {
@@ -16,27 +16,26 @@ export default function Navbar() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    let unsubscribeFirestore: (() => void) | undefined;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
         setEmailVerified(currentUser.emailVerified);
 
-        try {
-          const userRef = doc(db, "users", currentUser.uid);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists()) {
-            const data = userSnap.data();
+        const userRef = doc(db, "users", currentUser.uid);
+
+        // Listen to Firestore document changes
+        unsubscribeFirestore = onSnapshot(userRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
             setFullName(data.fullName || "");
             setRole(data.role || "");
           } else {
             setFullName("");
             setRole("");
           }
-        } catch (err) {
-          console.error("Error fetching user data:", err);
-          setFullName("");
-          setRole("");
-        }
+        });
       } else {
         setUser(null);
         setEmailVerified(false);
@@ -44,7 +43,11 @@ export default function Navbar() {
         setRole("");
       }
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeFirestore) unsubscribeFirestore();
+    };
   }, []);
 
   useEffect(() => {
@@ -105,6 +108,14 @@ export default function Navbar() {
                           className="block px-4 py-2 text-gray-700 hover:bg-gray-100"
                         >
                           Admin Dashboard
+                        </Link>
+                      )}
+                      {(role === "admin" || role === "user") && (
+                        <Link
+                          href="/editprofile"
+                          className="block px-4 py-2 text-gray-700 hover:bg-gray-100"
+                        >
+                          Edit Profile
                         </Link>
                       )}
                       <button
