@@ -1,25 +1,62 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { FiSettings } from "react-icons/fi";
 
 export default function Navbar() {
   const [user, setUser] = useState<User | null>(null);
   const [emailVerified, setEmailVerified] = useState(false);
+  const [fullName, setFullName] = useState<string>("");
+  const [role, setRole] = useState<string>("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
         setEmailVerified(currentUser.emailVerified);
+
+        try {
+          const userRef = doc(db, "users", currentUser.uid);
+          const userSnap = await getDoc(userRef);
+          if (userSnap.exists()) {
+            const data = userSnap.data();
+            setFullName(data.fullName || "");
+            setRole(data.role || "");
+          } else {
+            setFullName("");
+            setRole("");
+          }
+        } catch (err) {
+          console.error("Error fetching user data:", err);
+          setFullName("");
+          setRole("");
+        }
       } else {
         setUser(null);
         setEmailVerified(false);
+        setFullName("");
+        setRole("");
       }
     });
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -50,15 +87,36 @@ export default function Navbar() {
         ) : (
           <>
             {emailVerified ? (
-              <>
-                <span className="text-gray-600 text-sm">Hi, {user.email}</span>
-                <button
-                  onClick={handleLogout}
-                  className="bg-pink-500 text-white px-3 py-1 rounded hover:bg-pink-600"
-                >
-                  Logout
-                </button>
-              </>
+              <div className="flex items-center space-x-2 relative">
+                <span className="text-gray-600 text-sm">
+                  Hi, {fullName || "User"}
+                </span>
+                <div className="relative" ref={dropdownRef}>
+                  <FiSettings
+                    className="text-gray-600 cursor-pointer hover:text-pink-500"
+                    size={20}
+                    onClick={() => setDropdownOpen((prev) => !prev)}
+                  />
+                  {dropdownOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-50">
+                      {role === "admin" && (
+                        <Link
+                          href="/admindashboard"
+                          className="block px-4 py-2 text-gray-700 hover:bg-gray-100"
+                        >
+                          Admin Dashboard
+                        </Link>
+                      )}
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100"
+                      >
+                        Logout
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : (
               <span className="text-red-500 text-sm">
                 Please verify your email.

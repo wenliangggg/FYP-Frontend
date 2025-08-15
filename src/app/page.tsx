@@ -1,9 +1,10 @@
 'use client';
 
+import { where } from "firebase/firestore";
 import { FaBook, FaVideo, FaRobot } from "react-icons/fa";
 import { MdSecurity } from "react-icons/md";
 import { useState, useEffect } from "react";
-import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs, query, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 interface Review {
@@ -16,12 +17,15 @@ interface Review {
 
 export default function LandingPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Fetch latest 3 reviews for testimonials
   const fetchReviews = async () => {
     try {
       const reviewsRef = collection(db, "reviews");
-      const q = query(reviewsRef, orderBy("createdAt", "desc"), limit(3));
+      const q = query(
+        reviewsRef,
+        where("showOnHome", "==", true)
+      );
       const snapshot = await getDocs(q);
       const reviewsList = snapshot.docs.map((doc) => ({
         id: doc.id,
@@ -33,9 +37,28 @@ export default function LandingPage() {
     }
   };
 
+  // Auto-slide if more than 3 reviews
+  useEffect(() => {
+    if (reviews.length > 3) {
+      const interval = setInterval(() => {
+        setCurrentIndex((prev) => (prev + 1) % reviews.length);
+      }, 3000); // change every 3s
+      return () => clearInterval(interval);
+    }
+  }, [reviews]);
+
   useEffect(() => {
     fetchReviews();
   }, []);
+
+  const visibleReviews =
+    reviews.length > 3
+      ? [
+          reviews[currentIndex],
+          reviews[(currentIndex + 1) % reviews.length],
+          reviews[(currentIndex + 2) % reviews.length],
+        ]
+      : reviews;
 
   return (
     <main className="bg-white">
@@ -124,20 +147,51 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Testimonials Section */}
+{/* Testimonials Section */}
       <section className="max-w-6xl mx-auto py-16 px-6">
-        <h2 className="text-3xl font-bold text-center text-pink-600 mb-10">
+        <h2 className="text-4xl font-extrabold text-center text-pink-600 mb-12 tracking-tight">
           What Parents Say
         </h2>
 
         {reviews.length === 0 ? (
-          <p className="text-center text-gray-600">No reviews yet. Be the first to review!</p>
+          <p className="text-center text-gray-500 text-lg">
+            No reviews yet. Be the first to share your experience! 💬
+          </p>
         ) : (
-          <div className="grid md:grid-cols-3 gap-8">
-            {reviews.map((rev) => (
-              <div key={rev.id} className="p-6 bg-white rounded-xl shadow text-center">
-                <p className="text-gray-700 italic">“{rev.message}”</p>
-                <p className="mt-4 font-semibold">– {rev.userName}</p>
+          <div className="grid md:grid-cols-3 gap-8 transition-all duration-500">
+            {visibleReviews.map((rev) => (
+              <div
+                key={rev.id}
+                className="relative p-6 bg-white rounded-2xl shadow-lg border border-pink-100 hover:shadow-2xl hover:scale-[1.02] transition-transform duration-300"
+              >
+                <div className="absolute -top-4 -left-4 text-pink-200 text-6xl">
+                  “
+                </div>
+                <p className="text-gray-700 italic text-lg leading-relaxed">
+                  {rev.message}
+                </p>
+                <div className="mt-6 flex flex-col items-center">
+                  <p className="text-gray-900 font-semibold text-lg">{rev.userName}</p>
+                  <div className="flex mt-1">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <svg
+                        key={index}
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill={index < rev.rating ? "gold" : "none"}
+                        viewBox="0 0 24 24"
+                        stroke="gold"
+                        className="w-5 h-5"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="1.5"
+                          d="M11.48 3.499a.562.562 0 011.04 0l2.071 5.281a.563.563 0 00.475.345l5.641.411c.54.04.757.73.364 1.093l-4.29 3.73a.563.563 0 00-.182.557l1.285 5.573c.12.522-.454.93-.91.643l-4.9-3.023a.563.563 0 00-.586 0l-4.9 3.023c-.456.287-1.03-.121-.91-.643l1.285-5.573a.563.563 0 00-.182-.557l-4.29-3.73c-.393-.363-.176-1.053.364-1.093l5.641-.411a.563.563 0 00.475-.345l2.071-5.281z"
+                        />
+                      </svg>
+                    ))}
+                  </div>
+                </div>
               </div>
             ))}
           </div>

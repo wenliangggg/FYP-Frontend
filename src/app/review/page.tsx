@@ -77,6 +77,7 @@ export default function ReviewPage() {
         message,
         rating,
         createdAt: serverTimestamp(),
+        showOnHome: false 
       });
       setMessage("");
       setRating(0);
