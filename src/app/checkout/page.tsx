@@ -1,7 +1,6 @@
-// app/checkout/page.tsx
-import CheckoutPage from "./CheckoutClient";
+// src/app/checkout/page.tsx
+import CheckoutClient from "./CheckoutClient";
 
-export default function CheckoutPageWrapper({ searchParams }: { searchParams: { plan?: string } }) {
-  const plan = searchParams.plan ?? "Unknown Plan";
-  return <CheckoutPage subplan={plan} />;
+export default function CheckoutPage() {
+  return <CheckoutClient />; // no props needed
 }
