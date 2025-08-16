@@ -1,6 +1,4 @@
-"use client"; // ✅ make the whole page client-side
-
-export const dynamic = "force-dynamic"; // disables static prerendering
+export const dynamic = "force-dynamic"; // Disable static pre-rendering
 import CheckoutClient from "./CheckoutClient";
 
 export default function CheckoutPage() {
