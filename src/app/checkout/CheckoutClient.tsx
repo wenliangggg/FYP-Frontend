@@ -6,7 +6,7 @@ import { useState } from "react";
 export default function CheckoutClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const plan = searchParams.get("plan") ?? "Free Plan"; // default to Free Plan
+  const plan = searchParams?.get("plan") ?? "Unknown Plan";
   const [processing, setProcessing] = useState(false);
 
   const handlePaymentRedirect = () => {
@@ -15,7 +15,6 @@ export default function CheckoutClient() {
       router.push(`/payment?plan=${encodeURIComponent(plan)}`);
     }, 1000);
   };
-
 
   return (
     <section className="bg-white py-20 px-6">

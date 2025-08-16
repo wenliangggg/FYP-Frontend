@@ -1,5 +1,4 @@
-// src/app/checkout/page.tsx
-"use client"; // ✅ make this a client component
+"use client"; // ✅ make the whole page client-side
 
 import CheckoutClient from "./CheckoutClient";
 
