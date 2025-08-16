@@ -77,6 +77,7 @@ export default function Navbar() {
         <Link href="/" className="text-gray-700 hover:text-pink-500">Home</Link>
         <Link href="/about" className="text-gray-700 hover:text-pink-500">About</Link>
         <Link href="/contact" className="text-gray-700 hover:text-pink-500">Contact</Link>
+        <Link href="/catalogue" className="text-gray-700 hover:text-pink-500">Catalogue</Link>
 
         {user && emailVerified && (
           <Link href="/review" className="text-gray-700 hover:text-pink-500">Reviews</Link>
