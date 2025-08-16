@@ -57,7 +57,7 @@ export default function PaymentPage() {
       });
 
       alert(`Payment for ${plan} via ${selectedMethod} successful! 🎉`);
-      router.push("/dashboard");
+      router.push("/");
     } catch (error) {
       console.error("Payment sync error:", error);
       alert("Something went wrong while processing payment.");

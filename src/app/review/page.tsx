@@ -143,7 +143,7 @@ export default function ReviewPage() {
         )}
 
         {/* Reviews List */}
-        {loading ? (
+{/*         {loading ? (
           <p>Loading reviews...</p>
         ) : reviews.length === 0 ? (
           <p>No reviews yet. Be the first to review!</p>
@@ -159,7 +159,7 @@ export default function ReviewPage() {
               </li>
             ))}
           </ul>
-        )}
+        )} */}
       </div>
     </section>
   );

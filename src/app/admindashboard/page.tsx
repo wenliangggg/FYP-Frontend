@@ -19,13 +19,23 @@ interface ReviewData {
   showOnHome?: boolean; // new field for homepage display toggle
 }
 
+interface ContactData {
+  uid: string;
+  name: string;
+  email: string;
+  message: string;
+  createdAt: any;
+}
+
+
 export default function AdminDashboard() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [reviews, setReviews] = useState<ReviewData[]>([]);
+  const [contacts, setContacts] = useState<ContactData[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<"users" | "reviews">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "reviews" | "contacts">("users");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -54,15 +64,14 @@ export default function AdminDashboard() {
     setReviews(reviewsList);
   };
 
-  const handleEditReview = async (id: string, newMessage: string) => {
-    const reviewRef = doc(db, "reviews", id);
-    await updateDoc(reviewRef, { message: newMessage });
-    fetchReviews();
-  };
-
-  const handleDeleteReview = async (id: string) => {
-    await deleteDoc(doc(db, "reviews", id));
-    fetchReviews();
+  const fetchContacts = async () => {
+    const contactsRef = collection(db, "contacts");
+    const snapshot = await getDocs(contactsRef);
+    const contactsList: ContactData[] = snapshot.docs.map((doc) => ({
+      ...(doc.data() as ContactData),
+      uid: doc.id,
+    }));
+    setContacts(contactsList);
   };
 
   const handleToggleShowOnHome = async (id: string, current: boolean) => {
@@ -82,6 +91,7 @@ export default function AdminDashboard() {
         if (userSnap.exists() && userSnap.data().role === "admin") {
           await fetchUsers();
           await fetchReviews();
+          await fetchContacts();
         } else {
           setError("You do not have permission to view this page.");
         }
@@ -115,6 +125,12 @@ export default function AdminDashboard() {
             onClick={() => setActiveTab("reviews")}
           >
             Reviews
+          </li>
+          <li
+            className={`cursor-pointer px-4 py-2 rounded ${activeTab === "contacts" ? "bg-pink-100 font-semibold" : "hover:bg-gray-100"}`}
+            onClick={() => setActiveTab("contacts")}
+          >
+            Comments
           </li>
         </ul>
       </aside>
@@ -180,6 +196,38 @@ export default function AdminDashboard() {
             </div>
           </section>
         )}
+
+        {/* Contacts Tab */}
+        {activeTab === "contacts" && (
+          <section>
+            <h2 className="text-3xl font-bold text-pink-600 mb-6">Contact Comments</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse border border-gray-300 text-gray-600">
+                <thead className="bg-pink-50">
+                  <tr>
+                    <th className="border px-4 py-2">Name</th>
+                    <th className="border px-4 py-2">Email</th>
+                    <th className="border px-4 py-2">Message</th>
+                    <th className="border px-4 py-2">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contacts.map((c) => (
+                    <tr key={c.uid} className="hover:bg-gray-50">
+                      <td className="border px-4 py-2">{c.name}</td>
+                      <td className="border px-4 py-2">{c.email}</td>
+                      <td className="border px-4 py-2">{c.message}</td>
+                      <td className="border px-4 py-2">
+                        {c.createdAt?.toDate?.() ? c.createdAt.toDate().toLocaleString() : c.createdAt}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
       </section>
     </main>
   );
