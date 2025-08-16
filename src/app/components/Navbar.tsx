@@ -118,6 +118,14 @@ export default function Navbar() {
                           Edit Profile
                         </Link>
                       )}
+                      {(role === "admin" || role === "user") && (
+                        <Link
+                          href="/plans"
+                          className="block px-4 py-2 text-gray-700 hover:bg-gray-100"
+                        >
+                          Subscription Plans
+                        </Link>
+                      )}
                       <button
                         onClick={handleLogout}
                         className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100"
