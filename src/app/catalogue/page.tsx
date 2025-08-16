@@ -26,6 +26,14 @@ export default function HomePage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Helper to strip HTML tags from book snippet
+  const stripHTML = (html?: string) => {
+    if (!html) return "";
+    const div = document.createElement("div");
+    div.innerHTML = html;
+    return div.textContent || div.innerText || "";
+  };
+
   const search = async () => {
     const query = q.trim() || "stories";
     const url =
@@ -55,12 +63,12 @@ export default function HomePage() {
   }, [mode]);
 
   return (
-    <main className="bg-pink-50 min-h-screen py-10 text-gray-600">
+    <main className="bg-pink-50 min-h-screen py-10">
       <div className="max-w-5xl mx-auto p-6 bg-white rounded-xl shadow-lg">
         <h1 className="text-3xl font-bold mb-6 text-pink-600">Discover Books & Videos for Kids</h1>
 
         {/* Search */}
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-2 mb-4 text-gray-700">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -97,14 +105,17 @@ export default function HomePage() {
         </div>
 
         {/* Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {loading && <p>Loading…</p>}
           {error && <p className="text-red-600">{error}</p>}
           {!loading && !error && items.length === 0 && <p>No results. Try another topic.</p>}
           {!loading &&
             !error &&
             items.map((x, idx) => (
-              <div key={idx} className="border rounded-xl p-4 bg-white shadow-sm">
+              <div
+                key={idx}
+                className="border rounded-2xl p-4 bg-white shadow-lg hover:shadow-2xl hover:scale-[1.02] transition-transform duration-300"
+              >
                 {x.thumbnail && (
                   <img
                     src={x.thumbnail}
@@ -116,7 +127,9 @@ export default function HomePage() {
                 {mode === "books" ? (
                   <>
                     <p className="text-gray-600">{(x as Book).authors?.join(", ")}</p>
-                    {(x as Book).snippet && <p className="text-gray-700">{(x as Book).snippet}</p>}
+                    {(x as Book).snippet && (
+                      <p className="text-gray-700">{stripHTML((x as Book).snippet)}</p>
+                    )}
                     {(x as Book).infoLink && (
                       <a
                         href={(x as Book).infoLink}
