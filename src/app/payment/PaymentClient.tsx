@@ -5,18 +5,35 @@ import { useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 
-export default function PaymentPage() {
+export default function PaymentClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const plan = searchParams?.get("plan") ?? "Unknown Plan";
-  const [selectedMethod, setSelectedMethod] = useState<string>("Credit/Debit Card"); // default
+  const [selectedMethod, setSelectedMethod] = useState<string>("Credit/Debit Card");
   const [processing, setProcessing] = useState(false);
 
-  // Credit card details
+  // Card details
   const [cardName, setCardName] = useState("");
   const [cardNumber, setCardNumber] = useState("");
   const [expiry, setExpiry] = useState("");
   const [cvv, setCvv] = useState("");
+
+  // Price mapping
+  const planPrices: Record<string, string> = {
+    "Free Plan": "$0",
+    "Starter Plan": "$9.99",
+    "Mid-Tier Plan": "$19.99",
+    "Premium Plan": "$29.99",
+  };
+
+  // QR mapping
+  const planQR: Record<string, string> = {
+    "Starter Plan": "/qr/starter.png",
+    "Mid-Tier Plan": "/qr/mid.png",
+    "Premium Plan": "/qr/premium.png",
+    "Free Plan": "/qr/free.png",
+    "Unknown Plan": "/qr/free.png",
+  };
 
   const isCardValid = () => {
     return (
@@ -48,7 +65,6 @@ export default function PaymentPage() {
         return;
       }
 
-      // Update Firestore user document with chosen plan
       const userRef = doc(db, "users", user.uid);
       await updateDoc(userRef, {
         plan: plan,
@@ -56,7 +72,7 @@ export default function PaymentPage() {
         updatedAt: new Date(),
       });
 
-      alert(`Payment for ${plan} via ${selectedMethod} successful! 🎉`);
+      alert(`✅ Payment for ${plan} (${planPrices[plan]}) via ${selectedMethod} successful!`);
       router.push("/");
     } catch (error) {
       console.error("Payment sync error:", error);
@@ -69,7 +85,7 @@ export default function PaymentPage() {
   return (
     <section className="bg-white py-20 px-6 text-gray-500">
       <div className="max-w-5xl mx-auto rounded-2xl shadow-lg border border-gray-200 flex overflow-hidden">
-        
+
         {/* Sidebar */}
         <div className="w-1/3 bg-gray-50 border-r p-6">
           <h2 className="text-xl font-bold text-gray-700 mb-6">Payment Options</h2>
@@ -101,12 +117,16 @@ export default function PaymentPage() {
           </ul>
         </div>
 
-        {/* Main Content */}
+        {/* Main */}
         <div className="w-2/3 p-8 text-center">
           <h1 className="text-2xl font-bold text-pink-600 mb-6">
             Checkout – {plan}
           </h1>
+          <p className="text-lg font-semibold text-gray-800 mb-6">
+            Amount: {planPrices[plan] ?? "$0"}
+          </p>
 
+          {/* Credit Card Form */}
           {selectedMethod === "Credit/Debit Card" && (
             <div className="space-y-4 text-left">
               <label className="block">
@@ -158,14 +178,14 @@ export default function PaymentPage() {
             </div>
           )}
 
+          {/* PayNow QR */}
           {selectedMethod === "PayNow QR Code" && (
             <div className="flex flex-col items-center">
               <p className="text-gray-700 mb-4">Scan this QR Code to pay:</p>
               <div className="w-64 h-64 border rounded-lg flex items-center justify-center bg-gray-100">
-                {/* Replace with real QR Code image */}
                 <img
-                  src="/paynow-qr.png"
-                  alt="PayNow QR Code"
+                  src={planQR[plan] ?? "/qr/free.png"}
+                  alt={`${plan} PayNow QR Code`}
                   className="w-full h-full object-contain rounded-lg"
                 />
               </div>
