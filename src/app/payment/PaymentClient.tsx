@@ -65,11 +65,23 @@ export default function PaymentClient() {
         return;
       }
 
+      // Save to Firestore
       const userRef = doc(db, "users", user.uid);
       await updateDoc(userRef, {
         plan: plan,
         paymentMethod: selectedMethod,
         updatedAt: new Date(),
+      });
+
+      // Send email notification
+      await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: user.email,
+          plan,
+          method: selectedMethod,
+        }),
       });
 
       alert(`✅ Payment for ${plan} (${planPrices[plan]}) via ${selectedMethod} successful!`);
