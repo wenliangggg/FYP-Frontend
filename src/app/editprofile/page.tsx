@@ -16,11 +16,13 @@ import { EyeIcon, EyeOffIcon } from "lucide-react";
 export default function EditProfilePage() {
   const [user, setUser] = useState<User | null>(null);
   const [fullName, setFullName] = useState("");
+  const [plan, setPlan] = useState("Free Plan");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   const router = useRouter();
 
@@ -38,6 +40,7 @@ export default function EditProfilePage() {
         if (userDoc.exists()) {
           const data = userDoc.data();
           setFullName(data.fullName || "");
+          setPlan(data.plan || "Free Plan");
         }
       } catch (err) {
         console.error("Error fetching user data:", err);
@@ -79,6 +82,37 @@ export default function EditProfilePage() {
     }
   };
 
+  // Cancel subscription
+  const handleCancelPlan = async () => {
+    if (!user) return;
+    if (!confirm("Are you sure you want to cancel your subscription?")) return;
+
+    setCancelLoading(true);
+    try {
+      // Update Firestore
+      await updateDoc(doc(db, "users", user.uid), { plan: "Free Plan" });
+      setPlan("Free Plan");
+
+      // Send cancellation email
+      await fetch("/api/cancel-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: user.email,
+          plan: "Free Plan",
+          method: "Subscription Cancellation",
+        }),
+      });
+
+      alert("Your subscription has been cancelled. You are now on the Free Plan.");
+    } catch (err: any) {
+      console.error("Cancel plan error:", err);
+      alert("Failed to cancel subscription.");
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
   if (loading) return <p className="text-center py-20">Loading...</p>;
 
   return (
@@ -112,6 +146,22 @@ export default function EditProfilePage() {
               readOnly
               className="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-500 bg-gray-100 cursor-not-allowed"
             />
+          </div>
+
+          {/* Current Plan */}
+          <div className="p-4 bg-gray-50 rounded-md border border-gray-200">
+            <p className="text-sm font-medium text-gray-800">Current Plan</p>
+            <p className="text-lg font-semibold text-pink-600">{plan}</p>
+            {plan !== "Free Plan" && (
+              <button
+                type="button"
+                onClick={handleCancelPlan}
+                disabled={cancelLoading}
+                className="mt-3 w-full py-2 rounded-md font-semibold bg-red-600 text-white hover:bg-red-700 transition disabled:opacity-50"
+              >
+                {cancelLoading ? "Cancelling..." : "Cancel Subscription"}
+              </button>
+            )}
           </div>
 
           {/* Current Password */}
