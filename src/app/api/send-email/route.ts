@@ -4,14 +4,14 @@ import { Resend } from "resend";
 // Reads from .env.local
 //const resend = new Resend(process.env.RESEND_API_KEY);
 
-const resend = new Resend('re_bSujdPp8_BED6XtUuCrbaAhxNNQTz2hvc');
+const resend = new Resend('re_LAc2SdxK_FghA1hDYzWwGx7kSjNEWyXbL');
 
 export async function POST(req: Request) {
   try {
     const { email, plan, method } = await req.json();
 
     await resend.emails.send({
-      from: "Subscription_Plans@resend.dev", // must be verified in Resend
+      from: "Pay@resend.dev", // must be verified in Resend
       to: email,
       subject: `Payment Confirmation – ${plan}`,
       html: `

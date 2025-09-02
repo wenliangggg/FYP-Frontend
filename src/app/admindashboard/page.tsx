@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { collection, getDocs, doc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, updateDoc, deleteDoc, addDoc } from "firebase/firestore";
 
 interface UserData {
   uid: string;
@@ -27,15 +27,28 @@ interface ContactData {
   createdAt: any;
 }
 
+interface PlanData {
+  id: string;
+  name: string;
+  price: number;
+  description: string;
+  features: string[];
+}
 
 export default function AdminDashboard() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [reviews, setReviews] = useState<ReviewData[]>([]);
   const [contacts, setContacts] = useState<ContactData[]>([]);
+  const [plans, setPlans] = useState<PlanData[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<"users" | "reviews" | "contacts">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "reviews" | "contacts" | "plans">("users");
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const [editingPlanData, setEditingPlanData] = useState<Partial<PlanData>>({});
+
+
+  const [newPlan, setNewPlan] = useState({ name: "", price: 0, description: "", features: "" });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -74,6 +87,39 @@ export default function AdminDashboard() {
     setContacts(contactsList);
   };
 
+  const fetchPlans = async () => {
+    const snapshot = await getDocs(collection(db, "plans"));
+    setPlans(snapshot.docs.map((doc) => ({ ...(doc.data() as PlanData), id: doc.id })));
+  };
+  
+const handleAddPlan = async (e: React.MouseEvent<HTMLButtonElement>) => {
+  e.preventDefault(); // prevent page reload if inside a form
+if (!newPlan.name || newPlan.price < 0) {
+  alert("Plan name is required and price cannot be negative");
+  return;
+}
+
+  try {
+    await addDoc(collection(db, "plans"), {
+      name: newPlan.name,
+      price: newPlan.price,
+      description: newPlan.description,
+      features: newPlan.features.split(",").map(f => f.trim()),
+    });
+    setNewPlan({ name: "", price: 0, description: "", features: "" });
+    await fetchPlans(); // fetch after adding
+  } catch (err) {
+    console.error("Error adding plan:", err);
+    alert("Failed to add plan");
+  }
+};
+
+
+  const handleDeletePlan = async (id: string) => {
+    await deleteDoc(doc(db, "plans", id));
+    fetchPlans();
+  };
+
   const handleToggleShowOnHome = async (id: string, current: boolean) => {
     const reviewRef = doc(db, "reviews", id);
     await updateDoc(reviewRef, { showOnHome: !current });
@@ -92,6 +138,7 @@ export default function AdminDashboard() {
           await fetchUsers();
           await fetchReviews();
           await fetchContacts();
+          await fetchPlans();
         } else {
           setError("You do not have permission to view this page.");
         }
@@ -131,6 +178,12 @@ export default function AdminDashboard() {
             onClick={() => setActiveTab("contacts")}
           >
             Comments
+          </li>
+          <li
+            className={`cursor-pointer px-4 py-2 rounded ${activeTab === "plans" ? "bg-pink-100 font-semibold" : "hover:bg-gray-100"}`}
+            onClick={() => setActiveTab("plans")}
+          >
+            Plans
           </li>
         </ul>
       </aside>
@@ -225,6 +278,173 @@ export default function AdminDashboard() {
                 </tbody>
               </table>
             </div>
+          </section>
+        )}
+
+        {/* Plans Tab */}
+        {activeTab === "plans" && (
+          <section>
+            <h2 className="text-3xl font-bold text-pink-600 mb-6">Manage Subscription Plans</h2>
+
+            {/* Add New Plan */}
+            <div className="mb-6 p-4 border rounded bg-gray-50 text-gray-600">
+              <h3 className="font-semibold mb-2">Add New Plan</h3>
+              <div className="flex flex-col gap-2">
+                <input
+                  className="border p-2 rounded"
+                  placeholder="Plan Name"
+                  value={newPlan.name}
+                  onChange={(e) => setNewPlan({ ...newPlan, name: e.target.value })}
+                />
+                <input
+                  type="number"
+                  className="border p-2 rounded"
+                  placeholder="Price"
+                  value={newPlan.price}
+                  onChange={(e) => setNewPlan({ ...newPlan, price: Number(e.target.value) })}
+                />
+                <input
+                  className="border p-2 rounded"
+                  placeholder="Description"
+                  value={newPlan.description}
+                  onChange={(e) => setNewPlan({ ...newPlan, description: e.target.value })}
+                />
+                <input
+                  className="border p-2 rounded"
+                  placeholder="Features (comma separated)"
+                  value={newPlan.features}
+                  onChange={(e) => setNewPlan({ ...newPlan, features: e.target.value })}
+                />
+                <button
+                  onClick={handleAddPlan}
+                  className="bg-pink-600 text-white px-4 py-2 rounded hover:bg-pink-700"
+                >
+                  Add Plan
+                </button>
+              </div>
+            </div>
+
+          {/* Plans Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse border border-gray-300 text-gray-600">
+              <thead className="bg-pink-50">
+                <tr>
+                  <th className="border px-4 py-2">Name</th>
+                  <th className="border px-4 py-2">Price</th>
+                  <th className="border px-4 py-2">Description</th>
+                  <th className="border px-4 py-2">Features</th>
+                  <th className="border px-4 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plans.map((p) => (
+                  <tr key={p.id} className="hover:bg-gray-50">
+                    {/* Name */}
+                    <td className="border px-4 py-2">
+                      {editingPlanId === p.id ? (
+                        <input
+                          type="text"
+                          value={editingPlanData.name || ""}
+                          onChange={(e) => setEditingPlanData({ ...editingPlanData, name: e.target.value })}
+                          className="border px-2 py-1 rounded w-full"
+                        />
+                      ) : (
+                        p.name
+                      )}
+                    </td>
+
+                    {/* Price */}
+                    <td className="border px-4 py-2">
+                      {editingPlanId === p.id ? (
+                        <input
+                          type="number"
+                          value={editingPlanData.price || 0}
+                          onChange={(e) => setEditingPlanData({ ...editingPlanData, price: Number(e.target.value) })}
+                          className="border px-2 py-1 rounded w-full"
+                        />
+                      ) : (
+                        `$${p.price}`
+                      )}
+                    </td>
+
+                    {/* Description */}
+                    <td className="border px-4 py-2">
+                      {editingPlanId === p.id ? (
+                        <input
+                          type="text"
+                          value={editingPlanData.description || ""}
+                          onChange={(e) => setEditingPlanData({ ...editingPlanData, description: e.target.value })}
+                          className="border px-2 py-1 rounded w-full"
+                        />
+                      ) : (
+                        p.description
+                      )}
+                    </td>
+
+                    {/* Features */}
+                    <td className="border px-4 py-2">
+                      {editingPlanId === p.id ? (
+                        <input
+                          type="text"
+                          value={editingPlanData.features?.join(", ") || ""}
+                          onChange={(e) =>
+                            setEditingPlanData({ ...editingPlanData, features: e.target.value.split(",").map(f => f.trim()) })
+                          }
+                          className="border px-2 py-1 rounded w-full"
+                        />
+                      ) : (
+                        p.features.join(", ")
+                      )}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="border px-4 py-2 space-x-2">
+                      {editingPlanId === p.id ? (
+                        <>
+                          <button
+                            onClick={async () => {
+                              if (!editingPlanId) return;
+                              const planRef = doc(db, "plans", editingPlanId);
+                              await updateDoc(planRef, editingPlanData);
+                              setEditingPlanId(null);
+                              fetchPlans();
+                            }}
+                            className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingPlanId(null)}
+                            className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => {
+                              setEditingPlanId(p.id);
+                              setEditingPlanData(p);
+                            }}
+                            className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeletePlan(p.id)}
+                            className="text-red-600 hover:underline px-3 py-1"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           </section>
         )}
 

@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs } from "firebase/firestore";
 
 interface Plan {
+  id: string;
   name: string;
   price: string;
   features: string[];
@@ -17,60 +18,48 @@ export default function SubscriptionPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<string>("Free Plan");
 
-  const plans: Plan[] = [
-    {
-      name: "Free Plan",
-      price: "$0/month",
-      features: ["Basic access to kids content", "Limited recommendations", "Safe environment"],
-      isFree: true,
-    },
-    {
-      name: "Starter Plan",
-      price: "$9.99/month",
-      features: ["Access to basic books", "Limited videos", "Kid-safe chatbot"],
-    },
-    {
-      name: "Mid-Tier Plan",
-      price: "$19.99/month",
-      features: ["All Starter features", "Extra book recommendations", "More video content", "Priority support"],
-    },
-    {
-      name: "Premium Plan",
-      price: "$29.99/month",
-      features: ["All Mid-Tier features", "Unlimited access to books & videos", "Exclusive premium content", "1-on-1 chatbot guidance"],
-    },
-  ];
+  // Fetch plans from Firestore
+  const fetchPlans = async () => {
+    const snapshot = await getDocs(collection(db, "plans"));
+    const plansList: Plan[] = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<Plan, "id">),
+    }));
+    setPlans(plansList);
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
         router.push("/login");
-      } else {
-        setUser(currentUser);
+        return;
+      }
 
-        // 🔹 Fetch user document
-        const userRef = doc(db, "users", currentUser.uid);
-        const userSnap = await getDoc(userRef);
+      setUser(currentUser);
 
-        if (userSnap.exists()) {
-          const userData = userSnap.data();
-          if (userData.plan) {
-            setSelectedPlan(userData.plan);
-          } else {
-            // Default Free Plan if no plan
-            await updateDoc(userRef, { plan: "Free Plan" }).catch(async () => {
-              await setDoc(userRef, { plan: "Free Plan" }, { merge: true });
-            });
-            setSelectedPlan("Free Plan");
-          }
+      // Fetch user document
+      const userRef = doc(db, "users", currentUser.uid);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        if (userData.plan) {
+          setSelectedPlan(userData.plan);
         } else {
-          // Create user doc with Free Plan if doesn't exist
-          await setDoc(userRef, { plan: "Free Plan" });
+          await updateDoc(userRef, { plan: "Free Plan" }).catch(async () => {
+            await setDoc(userRef, { plan: "Free Plan" }, { merge: true });
+          });
           setSelectedPlan("Free Plan");
         }
+      } else {
+        await setDoc(userRef, { plan: "Free Plan" });
+        setSelectedPlan("Free Plan");
       }
+
+      await fetchPlans();
       setLoading(false);
     });
 
@@ -108,7 +97,7 @@ export default function SubscriptionPage() {
         <div className="grid md:grid-cols-4 gap-8">
           {plans.map((plan) => (
             <div
-              key={plan.name}
+              key={plan.id}
               className={`relative p-8 rounded-2xl shadow-lg border transition-transform duration-300 ${
                 selectedPlan === plan.name
                   ? "border-pink-600 scale-[1.03]"
@@ -116,7 +105,7 @@ export default function SubscriptionPage() {
               }`}
             >
               <h2 className="text-2xl font-bold text-pink-600 mb-4">{plan.name}</h2>
-              <p className="text-gray-900 text-xl font-semibold mb-6">{plan.price}</p>
+              <p className="text-gray-900 text-xl font-semibold mb-6">$ {plan.price}</p>
 
               <ul className="text-gray-700 mb-6 space-y-2">
                 {plan.features.map((feature, idx) => (
@@ -140,7 +129,7 @@ export default function SubscriptionPage() {
           ))}
         </div>
 
-        {/* ✅ Checkout only for paid plans */}
+        {/* Checkout only for paid plans */}
         {!plans.find((p) => p.name === selectedPlan)?.isFree && (
           <div className="mt-10">
             <button
