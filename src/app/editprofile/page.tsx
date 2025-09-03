@@ -16,7 +16,7 @@ import { EyeIcon, EyeOffIcon } from "lucide-react";
 export default function EditProfilePage() {
   const [user, setUser] = useState<User | null>(null);
   const [fullName, setFullName] = useState("");
-  const [plan, setPlan] = useState("Free Plan");
+  const [plan, setPlan] = useState("Free Plans");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -40,7 +40,7 @@ export default function EditProfilePage() {
         if (userDoc.exists()) {
           const data = userDoc.data();
           setFullName(data.fullName || "");
-          setPlan(data.plan || "Free Plan");
+          setPlan(data.plan || "Free Plans");
         }
       } catch (err) {
         console.error("Error fetching user data:", err);
@@ -90,8 +90,8 @@ export default function EditProfilePage() {
     setCancelLoading(true);
     try {
       // Update Firestore
-      await updateDoc(doc(db, "users", user.uid), { plan: "Free Plan" });
-      setPlan("Free Plan");
+      await updateDoc(doc(db, "users", user.uid), { plan: "Free Plans" });
+      setPlan("Free Plans");
 
       // Send cancellation email
       await fetch("/api/cancel-plan", {
@@ -99,12 +99,12 @@ export default function EditProfilePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: user.email,
-          plan: "Free Plan",
+          plan: "Free Plans",
           method: "Subscription Cancellation",
         }),
       });
 
-      alert("Your subscription has been cancelled. You are now on the Free Plan.");
+      alert("Your subscription has been cancelled. You are now on the Free Plans.");
     } catch (err: any) {
       console.error("Cancel plan error:", err);
       alert("Failed to cancel subscription.");
@@ -152,7 +152,7 @@ export default function EditProfilePage() {
           <div className="p-4 bg-gray-50 rounded-md border border-gray-200">
             <p className="text-sm font-medium text-gray-800">Current Plan</p>
             <p className="text-lg font-semibold text-pink-600">{plan}</p>
-            {plan !== "Free Plan" && (
+            {plan !== "Free Plans" && (
               <button
                 type="button"
                 onClick={handleCancelPlan}
