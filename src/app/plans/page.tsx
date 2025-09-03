@@ -32,39 +32,47 @@ export default function SubscriptionPage() {
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) {
-        router.push("/login");
-        return;
-      }
+  const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    if (!currentUser) {
+      router.push("/login");
+      return;
+    }
 
-      setUser(currentUser);
+    setUser(currentUser);
 
-      // Fetch user document
-      const userRef = doc(db, "users", currentUser.uid);
-      const userSnap = await getDoc(userRef);
+    const userRef = doc(db, "users", currentUser.uid);
+    const userSnap = await getDoc(userRef);
 
-      if (userSnap.exists()) {
-        const userData = userSnap.data();
-        if (userData.plan) {
-          setSelectedPlan(userData.plan);
-        } else {
-          await updateDoc(userRef, { plan: "Free Plan" }).catch(async () => {
-            await setDoc(userRef, { plan: "Free Plan" }, { merge: true });
-          });
-          setSelectedPlan("Free Plan");
-        }
+    let currentPlan = "Free Plan"; // default
+
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      if (userData.plan) {
+        currentPlan = userData.plan;
       } else {
-        await setDoc(userRef, { plan: "Free Plan" });
-        setSelectedPlan("Free Plan");
+        await updateDoc(userRef, { plan: "Free Plan" }).catch(async () => {
+          await setDoc(userRef, { plan: "Free Plan" }, { merge: true });
+        });
       }
+    } else {
+      await setDoc(userRef, { plan: "Free Plan" });
+    }
 
-      await fetchPlans();
-      setLoading(false);
+    await fetchPlans();
+
+    // ✅ Ensure plan exists in Firestore list, else fallback
+    setPlans((prev) => {
+      const validPlan = prev.find((p) => p.name === currentPlan);
+      setSelectedPlan(validPlan ? currentPlan : "Free Plan");
+      return prev;
     });
 
-    return () => unsubscribe();
-  }, [router]);
+    setLoading(false);
+  });
+
+  return () => unsubscribe();
+}, [router]);
+
 
   const handleSelectPlan = async (plan: Plan) => {
     if (!user) return;

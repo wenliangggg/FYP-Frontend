@@ -52,6 +52,7 @@ export default function RegisterPage() {
         role: "user",
         createdAt: new Date(),
         emailVerified: user.emailVerified,
+        plan: "Free Plans",
       });
 
       alert("Registration successful! Please check your email to verify your account.");
