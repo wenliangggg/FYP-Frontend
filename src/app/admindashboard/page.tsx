@@ -98,7 +98,6 @@ if (!newPlan.name || newPlan.price < 0) {
   alert("Plan name is required and price cannot be negative");
   return;
 }
-
   try {
     await addDoc(collection(db, "plans"), {
       name: newPlan.name,
@@ -156,6 +155,39 @@ if (!newPlan.name || newPlan.price < 0) {
   if (loading) return <p className="p-6">Loading...</p>;
   if (error) return <p className="p-6 text-red-600">{error}</p>;
 
+  const handleDeleteUser = async (uid: string) => {
+  try {
+    await deleteDoc(doc(db, "users", uid));
+    setUsers(users.filter((u) => u.uid !== uid));
+  } catch (err) {
+    console.error("Error deleting user:", err);
+    alert("Failed to delete user");
+  }
+};
+
+const handleDeactivateUser = async (uid: string) => {
+  try {
+    const userRef = doc(db, "users", uid);
+    await updateDoc(userRef, { role: "inactive" }); // Or { active: false }
+    setUsers(users.map((u) => (u.uid === uid ? { ...u, role: "inactive" } : u)));
+  } catch (err) {
+    console.error("Error deactivating user:", err);
+    alert("Failed to deactivate user");
+  }
+};
+
+const handleToggleActiveUser = async (uid: string, currentRole: string | undefined) => {
+  try {
+    const newRole = currentRole === "inactive" ? "user" : "inactive"; // toggle
+    const userRef = doc(db, "users", uid);
+    await updateDoc(userRef, { role: newRole });
+    setUsers(users.map((u) => (u.uid === uid ? { ...u, role: newRole } : u)));
+  } catch (err) {
+    console.error("Error toggling user status:", err);
+    alert("Failed to update user status");
+  }
+};
+
   return (
     <main className="bg-white min-h-screen p-6 flex">
       {/* Sidebar Tabs */}
@@ -201,6 +233,8 @@ if (!newPlan.name || newPlan.price < 0) {
                     <th className="border px-4 py-2 text-left text-gray-800">Full Name</th>
                     <th className="border px-4 py-2 text-left text-gray-800">Email</th>
                     <th className="border px-4 py-2 text-left text-gray-800">Role</th>
+                    <th className="border px-4 py-2 text-left text-gray-800">Status</th>
+                    <th className="border px-4 py-2 text-left text-gray-800">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -210,6 +244,24 @@ if (!newPlan.name || newPlan.price < 0) {
                       <td className="border px-4 py-2">{user.fullName}</td>
                       <td className="border px-4 py-2">{user.email}</td>
                       <td className="border px-4 py-2">{user.role || "user"}</td>
+                      <td className="border px-4 py-2 space-x-2">
+                        <button
+                          onClick={() => handleToggleActiveUser(user.uid, user.role)}
+                          className={`px-3 py-1 rounded text-white ${
+                            user.role === "inactive" ? "bg-green-600 hover:bg-green-700" : "bg-yellow-500 hover:bg-yellow-600"
+                          }`}
+                        >
+                          {user.role === "inactive" ? "Activate" : "Deactivate"}
+                        </button>
+                      </td>
+                      <td className="border px-4 py-2 space-x-2">
+                        <button
+                          onClick={() => handleDeleteUser(user.uid)}
+                          className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
+                        >
+                          Delete
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
