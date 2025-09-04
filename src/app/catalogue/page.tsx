@@ -1,165 +1,252 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
 interface Book {
+  id: string;
   title: string;
-  authors?: string[];
-  snippet?: string;
-  infoLink?: string;
-  thumbnail?: string;
+  authors: string[];
+  infoLink: string;
+  thumbnail: string;
+  buckets?: string[];
 }
 
 interface Video {
+  id: string;
   title: string;
+  description: string;
+  thumbnail: string;
   channel?: string;
   url?: string;
-  thumbnail?: string;
 }
 
-type Item = Book | Video;
+const shelves = [
+  { key: "", label: "All" },
+  { key: "juvenile_fiction", label: "Fiction" },
+  { key: "juvenile_nonfiction", label: "Nonfiction" },
+  { key: "education", label: "Education" },
+  { key: "literature", label: "Literature" },
+  { key: "early_readers", label: "Picture/Board/Early" },
+  { key: "middle_grade", label: "Middle Grade" },
+  { key: "poetry_humor", label: "Poetry & Humor" },
+  { key: "biography", label: "Biography" },
+  { key: "juvenile_other", label: "Other (Kids)" },
+  { key: "young_adult", label: "Young Adult" },
+];
 
 export default function HomePage() {
-  const [q, setQ] = useState<string>("");
   const [mode, setMode] = useState<"books" | "videos">("books");
-  const [items, setItems] = useState<Item[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [bucket, setBucket] = useState("");
+  const [page, setPage] = useState(1);
+  const [books, setBooks] = useState<Book[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  // Helper to strip HTML tags from book snippet
-  const stripHTML = (html?: string) => {
-    if (!html) return "";
-    const div = document.createElement("div");
-    div.innerHTML = html;
-    return div.textContent || div.innerText || "";
-  };
-
-  const search = async () => {
-    const query = q.trim() || "stories";
-    const url =
-      mode === "books"
-        ? `/catalogue/books?q=${encodeURIComponent(query)}&lang=en&limit=8`
-        : `/catalogue/videos?q=${encodeURIComponent(query + " for kids")}&limit=8`;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`API returned status ${res.status}`);
-      const data = await res.json();
-      setItems(data.items || []);
-    } catch (e: any) {
-      console.error(e);
-      setError("Failed to load results: " + e.message);
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const pageSize = 20;
 
   useEffect(() => {
     search();
-  }, [mode]);
+  }, [mode, page, bucket]);
+
+  async function search() {
+    setLoading(true);
+    try {
+      if (mode === "books") {
+        const params = new URLSearchParams({
+          q: query,
+          shelf: bucket,
+          lang: "en",
+          page: String(page),
+          pageSize: String(pageSize),
+        });
+        const res = await fetch(`/catalogue/books?${params.toString()}`);
+        const data = await res.json();
+        setBooks(data.items || []);
+      } else {
+        const params = new URLSearchParams({
+          q: query || "stories for kids",
+          page: String(page),
+          pageSize: String(pageSize),
+        });
+        const res = await fetch(`/catalogue/videos?${params.toString()}`);
+        const data = await res.json();
+        setVideos(data.items || []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setLoading(false);
+  }
 
   return (
-    <main className="bg-pink-50 min-h-screen py-10">
-      <div className="max-w-5xl mx-auto p-6 bg-white rounded-xl shadow-lg">
-        <h1 className="text-3xl font-bold mb-6 text-pink-600">Discover Books & Videos for Kids</h1>
+    <main className="bg-white">
+          <div className="max-w-[1100px] mx-auto p-6 font-sans text-[#111]">
+      <h1 className="mb-3 text-2xl font-bold">
+        Discover Books & Videos for Kids
+      </h1>
 
-        {/* Search */}
-        <div className="flex gap-2 mb-4 text-gray-700">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Try 'dinosaurs', 'space', 'ballet'…"
-            onKeyDown={(e) => e.key === "Enter" && search()}
-            className="flex-1 p-2 border rounded-lg"
-          />
-          <button
-            onClick={search}
-            className="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700"
-          >
-            Search
-          </button>
+      {/* Search bar */}
+      <div className="flex gap-2 mb-3">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search titles/topics (optional)…"
+          className="flex-1 border border-[#ddd] rounded-xl px-3 py-2"
+          onKeyDown={(e) => e.key === "Enter" && search()}
+        />
+        <button
+          onClick={() => {
+            setPage(1);
+            search();
+          }}
+          className="px-4 py-2 rounded-xl bg-[#111] text-white"
+        >
+          Search
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 mb-3">
+        <button
+          onClick={() => {
+            setMode("books");
+            setPage(1);
+          }}
+          className={`px-4 py-2 rounded-xl ${
+            mode === "books" ? "bg-[#111] text-white" : "bg-[#f2f2f2]"
+          }`}
+        >
+          Books
+        </button>
+        <button
+          onClick={() => {
+            setMode("videos");
+            setPage(1);
+          }}
+          className={`px-4 py-2 rounded-xl ${
+            mode === "videos" ? "bg-[#111] text-white" : "bg-[#f2f2f2]"
+          }`}
+        >
+          Videos
+        </button>
+      </div>
+
+      {/* Shelves (only for books) */}
+      {mode === "books" && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {shelves.map((s) => (
+            <span
+              key={s.key}
+              onClick={() => {
+                setBucket(s.key);
+                setPage(1);
+              }}
+              className={`px-3 py-1 rounded-full border cursor-pointer ${
+                bucket === s.key
+                  ? "bg-[#111] text-white border-[#111]"
+                  : "bg-[#f2f2f2] border-[#e6e6e6]"
+              }`}
+            >
+              {s.label}
+            </span>
+          ))}
         </div>
+      )}
 
-        {/* Tabs */}
-        <div className="mb-4">
-          <button
-            onClick={() => setMode("books")}
-            className={`px-4 py-2 mr-2 rounded-lg ${
-              mode === "books" ? "bg-pink-600 text-white" : "bg-gray-200 text-gray-800"
-            }`}
-          >
-            Books
-          </button>
-          <button
-            onClick={() => setMode("videos")}
-            className={`px-4 py-2 rounded-lg ${
-              mode === "videos" ? "bg-pink-600 text-white" : "bg-gray-200 text-gray-800"
-            }`}
-          >
-            Videos
-          </button>
-        </div>
-
-        {/* Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-          {loading && <p>Loading…</p>}
-          {error && <p className="text-red-600">{error}</p>}
-          {!loading && !error && items.length === 0 && <p>No results. Try another topic.</p>}
-          {!loading &&
-            !error &&
-            items.map((x, idx) => (
+      {/* Results */}
+      {loading ? (
+        <p>Loading…</p>
+      ) : mode === "books" ? (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+          {books.length === 0 ? (
+            <p>No books found.</p>
+          ) : (
+            books.map((b) => (
               <div
-                key={idx}
-                className="border rounded-2xl p-4 bg-white shadow-lg hover:shadow-2xl hover:scale-[1.02] transition-transform duration-300"
+                key={b.id}
+                className="border border-[#eee] rounded-xl p-3 flex flex-col gap-2"
               >
-                {x.thumbnail && (
-                  <img
-                    src={x.thumbnail}
-                    alt={x.title}
-                    className="w-full h-40 object-cover rounded-md mb-2"
-                  />
-                )}
-                <h3 className="font-semibold">{x.title}</h3>
-                {mode === "books" ? (
-                  <>
-                    <p className="text-gray-600">{(x as Book).authors?.join(", ")}</p>
-                    {(x as Book).snippet && (
-                      <p className="text-gray-700">{stripHTML((x as Book).snippet)}</p>
-                    )}
-                    {(x as Book).infoLink && (
-                      <a
-                        href={(x as Book).infoLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-pink-600 underline text-sm"
-                      >
-                        View on Google Books
-                      </a>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <p className="text-gray-600">{(x as Video).channel}</p>
-                    {(x as Video).url && (
-                      <a
-                        href={(x as Video).url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-pink-600 underline text-sm"
-                      >
-                        Watch on YouTube
-                      </a>
-                    )}
-                  </>
+                <img
+                  src={b.thumbnail || "/images/book-placeholder.png"}
+                  alt=""
+                  className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]"
+                />
+                <div>
+                  <strong>{b.title}</strong>
+                  <div className="text-sm text-[#666]">
+                    {b.authors?.join(", ") || "Unknown author"}
+                  </div>
+                </div>
+                {b.infoLink && (
+                  <a
+                    href={b.infoLink}
+                    target="_blank"
+                    rel="noopener"
+                    className="text-[#0a58ca] text-sm"
+                  >
+                    View on Google Books
+                  </a>
                 )}
               </div>
-            ))}
+            ))
+          )}
         </div>
+      ) : (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+          {videos.length === 0 ? (
+            <p>No videos found.</p>
+          ) : (
+            videos.map((v) => (
+              <div
+                key={v.id}
+                className="border border-[#eee] rounded-xl p-3 flex flex-col gap-2"
+              >
+                {v.thumbnail && (
+                  <img
+                    src={v.thumbnail}
+                    alt=""
+                    className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]"
+                  />
+                )}
+                <div>
+                  <strong>{v.title}</strong>
+                  <div className="text-sm text-[#666]">{v.channel || ""}</div>
+                </div>
+                {v.id && (
+                  <a
+                    href={`https://www.youtube.com/watch?v=${v.id}`}
+                    target="_blank"
+                    rel="noopener"
+                    className="text-[#0a58ca] text-sm"
+                  >
+                    Watch on YouTube
+                  </a>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Pager (simple prev/next, you can expand later) */}
+      <div className="flex gap-2 justify-center mt-6">
+        <button
+          onClick={() => setPage((p) => Math.max(1, p - 1))}
+          disabled={page === 1}
+          className="px-3 py-1 border rounded-lg disabled:opacity-50"
+        >
+          ‹ Prev
+        </button>
+        <span>Page {page}</span>
+        <button
+          onClick={() => setPage((p) => p + 1)}
+          className="px-3 py-1 border rounded-lg"
+        >
+          Next ›
+        </button>
       </div>
+    </div>
     </main>
   );
 }

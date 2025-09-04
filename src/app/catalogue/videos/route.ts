@@ -1,22 +1,38 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const q = url.searchParams.get("q") || "stories";
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || "";
 
-  // Example using YouTube API (replace YOUR_API_KEY)
-  const res = await fetch(
-    `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${q}&maxResults=8&type=video&key=${process.env.YOUTUBE_API_KEY}`
-  );
-  const data = await res.json();
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
 
-  // Map to simplified format
-  const items = data.items?.map((v: any) => ({
-    title: v.snippet.title,
-    channel: v.snippet.channelTitle,
-    url: `https://www.youtube.com/watch?v=${v.id.videoId}`,
-    thumbnail: v.snippet.thumbnails?.high?.url,
-  })) || [];
+    const q = searchParams.get("q") || "";
+    const pageSize = parseInt(searchParams.get("pageSize") || "8", 10);
 
-  return NextResponse.json({ items });
+    const url =
+      "https://www.googleapis.com/youtube/v3/search?" +
+      new URLSearchParams({
+        q,
+        type: "video",
+        videoEmbeddable: "true",
+        maxResults: String(pageSize),
+        part: "snippet",
+        key: YOUTUBE_API_KEY,
+      });
+
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("Videos fetch failed: " + r.status);
+    const data = await r.json();
+
+    const videos = (data.items || []).map((v: any) => ({
+      id: v.id?.videoId,
+      title: v.snippet?.title,
+      description: v.snippet?.description,
+      thumbnail: v.snippet?.thumbnails?.default?.url,
+    }));
+
+    return NextResponse.json({ items: videos });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }
