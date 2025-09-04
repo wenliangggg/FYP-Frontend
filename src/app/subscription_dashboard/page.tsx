@@ -41,6 +41,25 @@ export default function AdminSubscriptionDashboard() {
   const [planSummary, setPlanSummary] = useState<PlanSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const exportCSV = () => {
+  if (!planSummary || planSummary.length === 0) return;
+
+  // Build CSV string
+  const header = ["Plan", "Active Users"];
+  const rows = planSummary.map((p) => [p.plan, p.count]);
+  const csvContent =
+    [header, ...rows].map((e) => e.join(",")).join("\n");
+
+  // Create blob and download
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", "subscription_report.csv");
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
   const fetchUsers = async () => {
     try {
       const usersRef = collection(db, "users");
@@ -112,6 +131,15 @@ export default function AdminSubscriptionDashboard() {
                   <p className="text-gray-500">Users</p>
                 </div>
               ))}
+            </div>
+
+            <div className="flex justify-end mb-4">
+              <button
+                onClick={exportCSV}
+                className="bg-pink-600 text-white px-4 py-2 rounded-md hover:bg-pink-700 transition"
+              >
+                Export Subscription Report
+              </button>
             </div>
 
             {/* ✅ Pie Chart */}
