@@ -19,64 +19,63 @@ export default function SubscriptionPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<Plan[]>([]);
-  const [selectedPlan, setSelectedPlan] = useState<string>("Free Plan");
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
 
   // Fetch plans from Firestore
   const fetchPlans = async () => {
     const snapshot = await getDocs(collection(db, "plans"));
-    const plansList: Plan[] = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...(doc.data() as Omit<Plan, "id">),
+    const plansList: Plan[] = snapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...(docSnap.data() as Omit<Plan, "id">),
     }));
     setPlans(plansList);
   };
 
   useEffect(() => {
-  const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-    if (!currentUser) {
-      router.push("/login");
-      return;
-    }
-
-    setUser(currentUser);
-
-    const userRef = doc(db, "users", currentUser.uid);
-    const userSnap = await getDoc(userRef);
-
-    let currentPlan = "Free Plan"; // default
-
-    if (userSnap.exists()) {
-      const userData = userSnap.data();
-      if (userData.plan) {
-        currentPlan = userData.plan;
-      } else {
-        await updateDoc(userRef, { plan: "Free Plan" }).catch(async () => {
-          await setDoc(userRef, { plan: "Free Plan" }, { merge: true });
-        });
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!currentUser) {
+        router.push("/login");
+        return;
       }
-    } else {
-      await setDoc(userRef, { plan: "Free Plan" });
-    }
 
-    await fetchPlans();
+      setUser(currentUser);
 
-    // ✅ Ensure plan exists in Firestore list, else fallback
-    setPlans((prev) => {
-      const validPlan = prev.find((p) => p.name === currentPlan);
-      setSelectedPlan(validPlan ? currentPlan : "Free Plan");
-      return prev;
+      const userRef = doc(db, "users", currentUser.uid);
+      const userSnap = await getDoc(userRef);
+
+      let currentPlanName = "Free Plan"; // default
+
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        if (userData.plan) {
+          currentPlanName = userData.plan;
+        } else {
+          await updateDoc(userRef, { plan: "Free Plan" }).catch(async () => {
+            await setDoc(userRef, { plan: "Free Plan" }, { merge: true });
+          });
+        }
+      } else {
+        await setDoc(userRef, { plan: "Free Plan" });
+      }
+
+      await fetchPlans();
+
+      setPlans((prev) => {
+        // find the plan object that matches the user's plan name
+        const validPlan = prev.find((p) => p.name === currentPlanName);
+        setSelectedPlan(validPlan || null);
+        return prev;
+      });
+
+      setLoading(false);
     });
 
-    setLoading(false);
-  });
-
-  return () => unsubscribe();
-}, [router]);
-
+    return () => unsubscribe();
+  }, [router]);
 
   const handleSelectPlan = async (plan: Plan) => {
     if (!user) return;
-    setSelectedPlan(plan.name);
+    setSelectedPlan(plan);
 
     const userRef = doc(db, "users", user.uid);
     await updateDoc(userRef, { plan: plan.name }).catch(async () => {
@@ -89,7 +88,9 @@ export default function SubscriptionPage() {
   };
 
   const handleCheckout = () => {
-    router.push(`/checkout?plan=${encodeURIComponent(selectedPlan)}`);
+    if (!selectedPlan) return;
+    // ✅ send plan.id, not plan.name
+    router.push(`/checkout?plan=${encodeURIComponent(selectedPlan.id)}`);
   };
 
   if (loading) return <p className="text-center py-20">Loading...</p>;
@@ -107,7 +108,7 @@ export default function SubscriptionPage() {
             <div
               key={plan.id}
               className={`relative p-8 rounded-2xl shadow-lg border transition-transform duration-300 ${
-                selectedPlan === plan.name
+                selectedPlan?.id === plan.id
                   ? "border-pink-600 scale-[1.03]"
                   : "border-gray-200 hover:scale-[1.02]"
               }`}
@@ -126,19 +127,19 @@ export default function SubscriptionPage() {
               <button
                 onClick={() => handleSelectPlan(plan)}
                 className={`w-full py-2 rounded-md font-semibold transition ${
-                  selectedPlan === plan.name
+                  selectedPlan?.id === plan.id
                     ? "bg-pink-700 text-white"
                     : "bg-pink-600 text-white hover:bg-pink-700"
                 }`}
               >
-                {selectedPlan === plan.name ? "Selected" : "Select Plan"}
+                {selectedPlan?.id === plan.id ? "Selected" : "Select Plan"}
               </button>
             </div>
           ))}
         </div>
 
         {/* Checkout only for paid plans */}
-        {!plans.find((p) => p.name === selectedPlan)?.isFree && (
+        {selectedPlan && !selectedPlan.isFree && (
           <div className="mt-10">
             <button
               onClick={handleCheckout}
