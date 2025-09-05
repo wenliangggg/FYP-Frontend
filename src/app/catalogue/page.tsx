@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Chatbot from "../components/Chatbot";
+import { auth, db } from "@/lib/firebase";
+import { onAuthStateChanged, User } from "firebase/auth";
+import {
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  getDocs,
+} from "firebase/firestore";
 
 interface Book {
   id: string;
@@ -43,16 +51,69 @@ export default function HomePage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(false);
-  const [favourites, setFavourites] = useState<any[]>([]);
+  const [user, setUser] = useState<User | null>(null);
+  const [favourites, setFavourites] = useState<{ id: string; type: string }[]>(
+    []
+  );
 
   const pageSize = 20;
 
+  // Watch auth
   useEffect(() => {
-    // load favourites from localStorage
-    const favs = localStorage.getItem("favourites");
-    if (favs) setFavourites(JSON.parse(favs));
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      if (u) loadFavourites(u.uid);
+      else setFavourites([]);
+    });
+    return () => unsub();
   }, []);
 
+  // Load favourites from Firestore
+  async function loadFavourites(uid: string) {
+    const snap = await getDocs(collection(db, "users", uid, "favourites"));
+    const favs: any[] = [];
+    snap.forEach((doc) => favs.push(doc.data()));
+    setFavourites(favs);
+  }
+
+  // Toggle favourite
+async function toggleFavourite(item: any, type: "book" | "video") {
+  if (!user) {
+    alert("Please log in to favourite items.");
+    return;
+  }
+
+  const exists = favourites.find((f) => f.id === item.id && f.type === type);
+  const ref = doc(db, "users", user.uid, "favourites", item.id);
+
+  if (exists) {
+    // Remove from favourites
+    await deleteDoc(ref);
+    setFavourites(favourites.filter((f) => !(f.id === item.id && f.type === type)));
+  } else {
+    // Build a safe object for Firestore
+    const newFav: any = {
+      id: item.id,
+      type,
+      title: item.title || "",
+    };
+
+    if (item.thumbnail) newFav.thumbnail = item.thumbnail;
+    if (item.authors) newFav.authors = item.authors;
+    if (item.channel) newFav.channel = item.channel;
+    if (item.infoLink) newFav.infoLink = item.infoLink;
+
+    await setDoc(ref, newFav);
+    setFavourites([...favourites, newFav]);
+  }
+}
+
+
+  function isFavourite(id: string, type: "book" | "video") {
+    return favourites.some((f) => f.id === id && f.type === type);
+  }
+
+  // Search API
   useEffect(() => {
     search();
   }, [mode, page, bucket]);
@@ -87,28 +148,14 @@ export default function HomePage() {
     setLoading(false);
   }
 
-  function toggleFavourite(item: any, type: "book" | "video") {
-    const exists = favourites.find((f) => f.id === item.id && f.type === type);
-    let updated;
-    if (exists) {
-      updated = favourites.filter((f) => !(f.id === item.id && f.type === type));
-    } else {
-      updated = [...favourites, { ...item, type }];
-    }
-    setFavourites(updated);
-    localStorage.setItem("favourites", JSON.stringify(updated));
-  }
-
-  function isFavourite(id: string, type: "book" | "video") {
-    return favourites.some((f) => f.id === id && f.type === type);
-  }
-
   return (
     <main className="bg-white">
       <div className="max-w-[1100px] mx-auto p-6 font-sans text-[#111]">
-        <h1 className="mb-3 text-2xl font-bold">Discover Books & Videos for Kids</h1>
+        <h1 className="mb-3 text-2xl font-bold">
+          Discover Books & Videos for Kids
+        </h1>
 
-        {/* Search bar */}
+        {/* Search */}
         <div className="flex gap-2 mb-3">
           <input
             value={query}
@@ -154,136 +201,93 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* Shelves (only for books) */}
-        {mode === "books" && (
-          <div className="flex flex-wrap gap-2 mb-4">
-            {shelves.map((s) => (
-              <span
-                key={s.key}
-                onClick={() => {
-                  setBucket(s.key);
-                  setPage(1);
-                }}
-                className={`px-3 py-1 rounded-full border cursor-pointer ${
-                  bucket === s.key
-                    ? "bg-[#111] text-white border-[#111]"
-                    : "bg-[#f2f2f2] border-[#e6e6e6]"
-                }`}
-              >
-                {s.label}
-              </span>
-            ))}
-          </div>
-        )}
-
         {/* Results */}
         {loading ? (
           <p>Loading…</p>
         ) : mode === "books" ? (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
-            {books.length === 0 ? (
-              <p>No books found.</p>
-            ) : (
-              books.map((b) => (
-                <div
-                  key={b.id}
-                  className="border border-[#eee] rounded-xl p-3 flex flex-col gap-2"
-                >
-                  <img
-                    src={b.thumbnail || "/images/book-placeholder.png"}
-                    alt=""
-                    className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]"
-                  />
-                  <div>
-                    <strong>{b.title}</strong>
-                    <div className="text-sm text-[#666]">
-                      {b.authors?.join(", ") || "Unknown author"}
-                    </div>
+            {books.map((b) => (
+              <div
+                key={b.id}
+                className="border border-[#eee] rounded-xl p-3 flex flex-col gap-2"
+              >
+                <img
+                  src={b.thumbnail || "/images/book-placeholder.png"}
+                  alt=""
+                  className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]"
+                />
+                <div>
+                  <strong>{b.title}</strong>
+                  <div className="text-sm text-[#666]">
+                    {b.authors?.join(", ") || "Unknown author"}
                   </div>
-                  {b.infoLink && (
-                    <a
-                      href={b.infoLink}
-                      target="_blank"
-                      rel="noopener"
-                      className="text-[#0a58ca] text-sm"
-                    >
-                      View on Google Books
-                    </a>
-                  )}
+                </div>
+                {b.infoLink && (
+                  <a
+                    href={b.infoLink}
+                    target="_blank"
+                    rel="noopener"
+                    className="text-[#0a58ca] text-sm"
+                  >
+                    View on Google Books
+                  </a>
+                )}
+                {user && (
                   <button
                     onClick={() => toggleFavourite(b, "book")}
                     className="px-2 py-1 mt-2 text-sm rounded-lg border"
                   >
-                    {isFavourite(b.id, "book") ? "★ Remove Favourite" : "☆ Add Favourite"}
+                    {isFavourite(b.id, "book")
+                      ? "★ Remove Favourite"
+                      : "☆ Add Favourite"}
                   </button>
-                </div>
-              ))
-            )}
+                )}
+              </div>
+            ))}
           </div>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
-            {videos.length === 0 ? (
-              <p>No videos found.</p>
-            ) : (
-              videos.map((v) => (
-                <div
-                  key={v.id}
-                  className="border border-[#eee] rounded-xl p-3 flex flex-col gap-2"
-                >
-                  {v.thumbnail && (
-                    <img
-                      src={v.thumbnail}
-                      alt=""
-                      className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]"
-                    />
-                  )}
-                  <div>
-                    <strong>{v.title}</strong>
-                    <div className="text-sm text-[#666]">{v.channel || ""}</div>
-                  </div>
-                  {v.id && (
-                    <a
-                      href={`https://www.youtube.com/watch?v=${v.id}`}
-                      target="_blank"
-                      rel="noopener"
-                      className="text-[#0a58ca] text-sm"
-                    >
-                      Watch on YouTube
-                    </a>
-                  )}
+            {videos.map((v) => (
+              <div
+                key={v.id}
+                className="border border-[#eee] rounded-xl p-3 flex flex-col gap-2"
+              >
+                {v.thumbnail && (
+                  <img
+                    src={v.thumbnail}
+                    alt=""
+                    className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]"
+                  />
+                )}
+                <div>
+                  <strong>{v.title}</strong>
+                  <div className="text-sm text-[#666]">{v.channel || ""}</div>
+                </div>
+                {v.id && (
+                  <a
+                    href={`https://www.youtube.com/watch?v=${v.id}`}
+                    target="_blank"
+                    rel="noopener"
+                    className="text-[#0a58ca] text-sm"
+                  >
+                    Watch on YouTube
+                  </a>
+                )}
+                {user && (
                   <button
                     onClick={() => toggleFavourite(v, "video")}
                     className="px-2 py-1 mt-2 text-sm rounded-lg border"
                   >
-                    {isFavourite(v.id, "video") ? "★ Remove Favourite" : "☆ Add Favourite"}
+                    {isFavourite(v.id, "video")
+                      ? "★ Remove Favourite"
+                      : "☆ Add Favourite"}
                   </button>
-                </div>
-              ))
-            )}
+                )}
+              </div>
+            ))}
           </div>
         )}
-
-        {/* Pager */}
-        <div className="flex gap-2 justify-center mt-6">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="px-3 py-1 border rounded-lg disabled:opacity-50"
-          >
-            ‹ Prev
-          </button>
-          <span>Page {page}</span>
-          <button
-            onClick={() => setPage((p) => p + 1)}
-            className="px-3 py-1 border rounded-lg"
-          >
-            Next ›
-          </button>
-        </div>
       </div>
-
-      {/* Chatbot */}
-      {/* <Chatbot /> */}
     </main>
   );
 }
