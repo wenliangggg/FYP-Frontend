@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Chatbot from "../components/Chatbot";
 
 interface Book {
   id: string;
@@ -247,6 +248,10 @@ export default function HomePage() {
         </button>
       </div>
     </div>
+
+    {/* Chatbot */} 
+      {/* <Chatbot /> */}
+
     </main>
   );
 }
