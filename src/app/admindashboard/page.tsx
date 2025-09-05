@@ -4,12 +4,15 @@ import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { collection, getDocs, doc, getDoc, updateDoc, deleteDoc, addDoc } from "firebase/firestore";
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, } from "recharts";
+import { MdSubscriptions } from "react-icons/md";
 
 interface UserData {
   uid: string;
   fullName: string;
   email: string;
   role?: string;
+  plan?: string;
 }
 
 interface ReviewData {
@@ -35,6 +38,13 @@ interface PlanData {
   features: string[];
 }
 
+interface PlanSummary {
+  plan: string;
+  count: number;
+}
+
+const COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#f59e0b"];
+
 export default function AdminDashboard() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [reviews, setReviews] = useState<ReviewData[]>([]);
@@ -43,11 +53,10 @@ export default function AdminDashboard() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<"users" | "reviews" | "contacts" | "plans">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "reviews" | "contacts" | "plans" | "subscriptions">("users");
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [editingPlanData, setEditingPlanData] = useState<Partial<PlanData>>({});
-
-
+  const [planSummary, setPlanSummary] = useState<PlanSummary[]>([]);
   const [newPlan, setNewPlan] = useState({ name: "", price: 0, description: "", features: "" });
 
   useEffect(() => {
@@ -65,7 +74,22 @@ export default function AdminDashboard() {
       uid: doc.id,
     }));
     setUsers(usersList);
+
+    // Count users by plan for subscriptions
+    const counts: Record<string, number> = {};
+    usersList.forEach((user) => {
+      if (user.plan) {
+        counts[user.plan] = (counts[user.plan] || 0) + 1;
+      }
+    });
+    setPlanSummary(
+      Object.entries(counts).map(([plan, count]) => ({
+        plan,
+        count,
+      }))
+    );
   };
+
 
   const fetchReviews = async () => {
     const reviewsRef = collection(db, "reviews");
@@ -188,6 +212,23 @@ const handleToggleActiveUser = async (uid: string, currentRole: string | undefin
   }
 };
 
+const exportCSV = () => {
+  if (!planSummary || planSummary.length === 0) return;
+  const header = ["Plan", "Active Users"];
+  const rows = planSummary.map((p) => [p.plan, p.count]);
+  const csvContent = [header, ...rows].map((e) => e.join(",")).join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", "subscription_report.csv");
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+
+
+
   return (
     <main className="bg-white min-h-screen p-6 flex">
       {/* Sidebar Tabs */}
@@ -216,6 +257,12 @@ const handleToggleActiveUser = async (uid: string, currentRole: string | undefin
             onClick={() => setActiveTab("plans")}
           >
             Plans
+          </li>
+                    <li
+            className={`cursor-pointer px-4 py-2 rounded ${activeTab === "subscriptions" ? "bg-pink-100 font-semibold" : "hover:bg-gray-100"}`}
+            onClick={() => setActiveTab("subscriptions")}
+          >
+            Subscriptions Dashboard
           </li>
         </ul>
       </aside>
@@ -500,6 +547,81 @@ const handleToggleActiveUser = async (uid: string, currentRole: string | undefin
           </section>
         )}
 
+          {/* Subscriptions */}
+        {activeTab === "subscriptions" && (
+          <section>
+            <h1 className="text-3xl font-bold text-pink-600 mb-8 flex items-center gap-2">
+              <MdSubscriptions className="text-pink-600" /> Subscription
+              Overview
+            </h1>
+
+            {planSummary.length === 0 ? (
+              <div className="bg-white p-6 rounded-xl shadow text-center">
+                <p className="text-gray-600">No users with a plan found.</p>
+              </div>
+            ) : (
+              <>
+                {/* Cards */}
+                <div className="grid md:grid-cols-3 gap-6 mb-12">
+                  {planSummary.map((plan, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition text-center"
+                    >
+                      <h2 className="text-xl font-semibold text-gray-800">
+                        {plan.plan}
+                      </h2>
+                      <p className="text-3xl font-bold text-pink-600 mt-3">
+                        {plan.count}
+                      </p>
+                      <p className="text-gray-500">Users</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-end mb-4">
+                  <button
+                    onClick={exportCSV}
+                    className="bg-pink-600 text-white px-4 py-2 rounded-md hover:bg-pink-700 transition"
+                  >
+                    Export Subscription Report
+                  </button>
+                </div>
+
+                {/* Pie Chart */}
+                <div className="bg-white p-6 rounded-xl shadow h-[400px]">
+                  <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                    Plan Distribution
+                  </h2>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={planSummary}
+                        dataKey="count"
+                        nameKey="plan"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={120}
+                        label={({ name, value }) => `${name}: ${value}`}
+                      >
+                        {planSummary.map((entry, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={COLORS[index % COLORS.length]}
+                            stroke="#fff"
+                            strokeWidth={2}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            )}
+          </section>
+        )}
       </section>
     </main>
   );
