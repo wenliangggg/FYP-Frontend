@@ -43,8 +43,15 @@ export default function HomePage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(false);
+  const [favourites, setFavourites] = useState<any[]>([]);
 
   const pageSize = 20;
+
+  useEffect(() => {
+    // load favourites from localStorage
+    const favs = localStorage.getItem("favourites");
+    if (favs) setFavourites(JSON.parse(favs));
+  }, []);
 
   useEffect(() => {
     search();
@@ -80,178 +87,203 @@ export default function HomePage() {
     setLoading(false);
   }
 
+  function toggleFavourite(item: any, type: "book" | "video") {
+    const exists = favourites.find((f) => f.id === item.id && f.type === type);
+    let updated;
+    if (exists) {
+      updated = favourites.filter((f) => !(f.id === item.id && f.type === type));
+    } else {
+      updated = [...favourites, { ...item, type }];
+    }
+    setFavourites(updated);
+    localStorage.setItem("favourites", JSON.stringify(updated));
+  }
+
+  function isFavourite(id: string, type: "book" | "video") {
+    return favourites.some((f) => f.id === id && f.type === type);
+  }
+
   return (
     <main className="bg-white">
-          <div className="max-w-[1100px] mx-auto p-6 font-sans text-[#111]">
-      <h1 className="mb-3 text-2xl font-bold">
-        Discover Books & Videos for Kids
-      </h1>
+      <div className="max-w-[1100px] mx-auto p-6 font-sans text-[#111]">
+        <h1 className="mb-3 text-2xl font-bold">Discover Books & Videos for Kids</h1>
 
-      {/* Search bar */}
-      <div className="flex gap-2 mb-3">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search titles/topics (optional)…"
-          className="flex-1 border border-[#ddd] rounded-xl px-3 py-2"
-          onKeyDown={(e) => e.key === "Enter" && search()}
-        />
-        <button
-          onClick={() => {
-            setPage(1);
-            search();
-          }}
-          className="px-4 py-2 rounded-xl bg-[#111] text-white"
-        >
-          Search
-        </button>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-2 mb-3">
-        <button
-          onClick={() => {
-            setMode("books");
-            setPage(1);
-          }}
-          className={`px-4 py-2 rounded-xl ${
-            mode === "books" ? "bg-[#111] text-white" : "bg-[#f2f2f2]"
-          }`}
-        >
-          Books
-        </button>
-        <button
-          onClick={() => {
-            setMode("videos");
-            setPage(1);
-          }}
-          className={`px-4 py-2 rounded-xl ${
-            mode === "videos" ? "bg-[#111] text-white" : "bg-[#f2f2f2]"
-          }`}
-        >
-          Videos
-        </button>
-      </div>
-
-      {/* Shelves (only for books) */}
-      {mode === "books" && (
-        <div className="flex flex-wrap gap-2 mb-4">
-          {shelves.map((s) => (
-            <span
-              key={s.key}
-              onClick={() => {
-                setBucket(s.key);
-                setPage(1);
-              }}
-              className={`px-3 py-1 rounded-full border cursor-pointer ${
-                bucket === s.key
-                  ? "bg-[#111] text-white border-[#111]"
-                  : "bg-[#f2f2f2] border-[#e6e6e6]"
-              }`}
-            >
-              {s.label}
-            </span>
-          ))}
+        {/* Search bar */}
+        <div className="flex gap-2 mb-3">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search titles/topics (optional)…"
+            className="flex-1 border border-[#ddd] rounded-xl px-3 py-2"
+            onKeyDown={(e) => e.key === "Enter" && search()}
+          />
+          <button
+            onClick={() => {
+              setPage(1);
+              search();
+            }}
+            className="px-4 py-2 rounded-xl bg-[#111] text-white"
+          >
+            Search
+          </button>
         </div>
-      )}
 
-      {/* Results */}
-      {loading ? (
-        <p>Loading…</p>
-      ) : mode === "books" ? (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
-          {books.length === 0 ? (
-            <p>No books found.</p>
-          ) : (
-            books.map((b) => (
-              <div
-                key={b.id}
-                className="border border-[#eee] rounded-xl p-3 flex flex-col gap-2"
-              >
-                <img
-                  src={b.thumbnail || "/images/book-placeholder.png"}
-                  alt=""
-                  className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]"
-                />
-                <div>
-                  <strong>{b.title}</strong>
-                  <div className="text-sm text-[#666]">
-                    {b.authors?.join(", ") || "Unknown author"}
-                  </div>
-                </div>
-                {b.infoLink && (
-                  <a
-                    href={b.infoLink}
-                    target="_blank"
-                    rel="noopener"
-                    className="text-[#0a58ca] text-sm"
-                  >
-                    View on Google Books
-                  </a>
-                )}
-              </div>
-            ))
-          )}
+        {/* Tabs */}
+        <div className="flex gap-2 mb-3">
+          <button
+            onClick={() => {
+              setMode("books");
+              setPage(1);
+            }}
+            className={`px-4 py-2 rounded-xl ${
+              mode === "books" ? "bg-[#111] text-white" : "bg-[#f2f2f2]"
+            }`}
+          >
+            Books
+          </button>
+          <button
+            onClick={() => {
+              setMode("videos");
+              setPage(1);
+            }}
+            className={`px-4 py-2 rounded-xl ${
+              mode === "videos" ? "bg-[#111] text-white" : "bg-[#f2f2f2]"
+            }`}
+          >
+            Videos
+          </button>
         </div>
-      ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
-          {videos.length === 0 ? (
-            <p>No videos found.</p>
-          ) : (
-            videos.map((v) => (
-              <div
-                key={v.id}
-                className="border border-[#eee] rounded-xl p-3 flex flex-col gap-2"
+
+        {/* Shelves (only for books) */}
+        {mode === "books" && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {shelves.map((s) => (
+              <span
+                key={s.key}
+                onClick={() => {
+                  setBucket(s.key);
+                  setPage(1);
+                }}
+                className={`px-3 py-1 rounded-full border cursor-pointer ${
+                  bucket === s.key
+                    ? "bg-[#111] text-white border-[#111]"
+                    : "bg-[#f2f2f2] border-[#e6e6e6]"
+                }`}
               >
-                {v.thumbnail && (
+                {s.label}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Results */}
+        {loading ? (
+          <p>Loading…</p>
+        ) : mode === "books" ? (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+            {books.length === 0 ? (
+              <p>No books found.</p>
+            ) : (
+              books.map((b) => (
+                <div
+                  key={b.id}
+                  className="border border-[#eee] rounded-xl p-3 flex flex-col gap-2"
+                >
                   <img
-                    src={v.thumbnail}
+                    src={b.thumbnail || "/images/book-placeholder.png"}
                     alt=""
                     className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]"
                   />
-                )}
-                <div>
-                  <strong>{v.title}</strong>
-                  <div className="text-sm text-[#666]">{v.channel || ""}</div>
-                </div>
-                {v.id && (
-                  <a
-                    href={`https://www.youtube.com/watch?v=${v.id}`}
-                    target="_blank"
-                    rel="noopener"
-                    className="text-[#0a58ca] text-sm"
+                  <div>
+                    <strong>{b.title}</strong>
+                    <div className="text-sm text-[#666]">
+                      {b.authors?.join(", ") || "Unknown author"}
+                    </div>
+                  </div>
+                  {b.infoLink && (
+                    <a
+                      href={b.infoLink}
+                      target="_blank"
+                      rel="noopener"
+                      className="text-[#0a58ca] text-sm"
+                    >
+                      View on Google Books
+                    </a>
+                  )}
+                  <button
+                    onClick={() => toggleFavourite(b, "book")}
+                    className="px-2 py-1 mt-2 text-sm rounded-lg border"
                   >
-                    Watch on YouTube
-                  </a>
-                )}
-              </div>
-            ))
-          )}
+                    {isFavourite(b.id, "book") ? "★ Remove Favourite" : "☆ Add Favourite"}
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+            {videos.length === 0 ? (
+              <p>No videos found.</p>
+            ) : (
+              videos.map((v) => (
+                <div
+                  key={v.id}
+                  className="border border-[#eee] rounded-xl p-3 flex flex-col gap-2"
+                >
+                  {v.thumbnail && (
+                    <img
+                      src={v.thumbnail}
+                      alt=""
+                      className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]"
+                    />
+                  )}
+                  <div>
+                    <strong>{v.title}</strong>
+                    <div className="text-sm text-[#666]">{v.channel || ""}</div>
+                  </div>
+                  {v.id && (
+                    <a
+                      href={`https://www.youtube.com/watch?v=${v.id}`}
+                      target="_blank"
+                      rel="noopener"
+                      className="text-[#0a58ca] text-sm"
+                    >
+                      Watch on YouTube
+                    </a>
+                  )}
+                  <button
+                    onClick={() => toggleFavourite(v, "video")}
+                    className="px-2 py-1 mt-2 text-sm rounded-lg border"
+                  >
+                    {isFavourite(v.id, "video") ? "★ Remove Favourite" : "☆ Add Favourite"}
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Pager */}
+        <div className="flex gap-2 justify-center mt-6">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-3 py-1 border rounded-lg disabled:opacity-50"
+          >
+            ‹ Prev
+          </button>
+          <span>Page {page}</span>
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            className="px-3 py-1 border rounded-lg"
+          >
+            Next ›
+          </button>
         </div>
-      )}
-
-      {/* Pager (simple prev/next, you can expand later) */}
-      <div className="flex gap-2 justify-center mt-6">
-        <button
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={page === 1}
-          className="px-3 py-1 border rounded-lg disabled:opacity-50"
-        >
-          ‹ Prev
-        </button>
-        <span>Page {page}</span>
-        <button
-          onClick={() => setPage((p) => p + 1)}
-          className="px-3 py-1 border rounded-lg"
-        >
-          Next ›
-        </button>
       </div>
-    </div>
 
-    {/* Chatbot */} 
+      {/* Chatbot */}
       {/* <Chatbot /> */}
-
     </main>
   );
 }
