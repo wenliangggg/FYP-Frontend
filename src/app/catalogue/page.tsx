@@ -75,14 +75,15 @@ export default function HomePage() {
 
   const pageSize = 20;
 
-  // Helper to convert mode to Firestore type
-  const getType = (m: "books" | "videos"): "book" | "video" => (m === "books" ? "book" : "video");
+  // Convert mode → Firestore type
+  const getType = (m: "books" | "videos"): "book" | "video" =>
+    m === "books" ? "book" : "video";
 
-  // Auth listener
+  // Listen for auth changes
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
-      if (u) loadFavourites(u?.uid || "");
+      if (u) loadFavourites(u.uid);
       else setFavourites([]);
     });
     return () => unsub();
@@ -139,7 +140,7 @@ export default function HomePage() {
     await loadReviewsForItem(reviewItem.id);
   }
 
-  // Load latest 3 reviews per item
+  // Load reviews
   async function loadReviewsForItem(itemId: string) {
     const q = query(
       collection(db, "books-video-reviews"),
@@ -167,7 +168,23 @@ export default function HomePage() {
     alert("Review reported. Admin will check it.");
   }
 
-  // Search / fetch items
+  // Report content (NEW)
+  async function reportContent(item: any, type: "book" | "video") {
+    if (!user) return alert("Please log in to report content.");
+    const reason = prompt("Why are you reporting this content? (optional)");
+    if (reason === null) return;
+    await addDoc(collection(db, "reports-contents"), {
+      itemId: item.id,
+      type,
+      title: item.title,
+      reportedBy: user.uid,
+      reason,
+      createdAt: Timestamp.now(),
+    });
+    alert("Content reported. Admin will review it.");
+  }
+
+  // Search / fetch
   useEffect(() => {
     search();
   }, [mode, page, bucket]);
@@ -218,59 +235,158 @@ export default function HomePage() {
             className="flex-1 border border-[#ddd] rounded-xl px-3 py-2"
             onKeyDown={(e) => e.key === "Enter" && search()}
           />
-          <button onClick={() => { setPage(1); search(); }} className="px-4 py-2 rounded-xl bg-[#111] text-white">Search</button>
+          <button
+            onClick={() => {
+              setPage(1);
+              search();
+            }}
+            className="px-4 py-2 rounded-xl bg-[#111] text-white"
+          >
+            Search
+          </button>
         </div>
 
         {/* Tabs */}
         <div className="flex gap-2 mb-3">
-          <button onClick={() => { setMode("books"); setPage(1); }} className={`px-4 py-2 rounded-xl ${mode === "books" ? "bg-[#111] text-white" : "bg-[#f2f2f2]"}`}>Books</button>
-          <button onClick={() => { setMode("videos"); setPage(1); }} className={`px-4 py-2 rounded-xl ${mode === "videos" ? "bg-[#111] text-white" : "bg-[#f2f2f2]"}`}>Videos</button>
+          <button
+            onClick={() => {
+              setMode("books");
+              setPage(1);
+            }}
+            className={`px-4 py-2 rounded-xl ${
+              mode === "books" ? "bg-[#111] text-white" : "bg-[#f2f2f2]"
+            }`}
+          >
+            Books
+          </button>
+          <button
+            onClick={() => {
+              setMode("videos");
+              setPage(1);
+            }}
+            className={`px-4 py-2 rounded-xl ${
+              mode === "videos" ? "bg-[#111] text-white" : "bg-[#f2f2f2]"
+            }`}
+          >
+            Videos
+          </button>
         </div>
 
-        {/* Shelves */}
+        {/* Shelves (books only) */}
         {mode === "books" && (
           <div className="flex flex-wrap gap-2 mb-4">
             {shelves.map((s) => (
-              <span key={s.key} onClick={() => { setBucket(s.key); setPage(1); }} className={`px-3 py-1 rounded-full border cursor-pointer ${bucket === s.key ? "bg-[#111] text-white border-[#111]" : "bg-[#f2f2f2] border-[#e6e6e6]"}`}>{s.label}</span>
+              <span
+                key={s.key}
+                onClick={() => {
+                  setBucket(s.key);
+                  setPage(1);
+                }}
+                className={`px-3 py-1 rounded-full border cursor-pointer ${
+                  bucket === s.key
+                    ? "bg-[#111] text-white border-[#111]"
+                    : "bg-[#f2f2f2] border-[#e6e6e6]"
+                }`}
+              >
+                {s.label}
+              </span>
             ))}
           </div>
         )}
 
         {/* Results */}
-        {loading ? <p>Loading…</p> : (
+        {loading ? (
+          <p>Loading…</p>
+        ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
             {(mode === "books" ? books : videos).length === 0 ? (
               <p>No items found.</p>
             ) : (mode === "books" ? books : videos).map((item: any) => (
               <div key={item.id} className="border border-[#eee] rounded-xl p-3 flex flex-col gap-2">
-                <img src={item.thumbnail || "/images/book-placeholder.png"} alt="" className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]" />
+                <img
+                  src={item.thumbnail || "/images/book-placeholder.png"}
+                  alt=""
+                  className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]"
+                />
                 <div>
                   <strong>{item.title}</strong>
-                  {mode === "books" && <div className="text-sm text-[#666]">{item.authors?.join(", ") || "Unknown author"}</div>}
-                  {mode === "videos" && <div className="text-sm text-[#666]">{item.channel || ""}</div>}
+                  {mode === "books" && (
+                    <div className="text-sm text-[#666]">
+                      {item.authors?.join(", ") || "Unknown author"}
+                    </div>
+                  )}
+                  {mode === "videos" && (
+                    <div className="text-sm text-[#666]">{item.channel || ""}</div>
+                  )}
                 </div>
-                {item.infoLink && <a href={item.infoLink} target="_blank" rel="noopener" className="text-[#0a58ca] text-sm">View on Google Books</a>}
-                {item.id && mode === "videos" && <a href={`https://www.youtube.com/watch?v=${item.id}`} target="_blank" rel="noopener" className="text-[#0a58ca] text-sm">Watch on YouTube</a>}
 
-                {/* Favourites and Review */}
+                {/* External Links */}
+                {item.infoLink && (
+                  <a
+                    href={item.infoLink}
+                    target="_blank"
+                    rel="noopener"
+                    className="text-[#0a58ca] text-sm"
+                  >
+                    View on Google Books
+                  </a>
+                )}
+                {item.id && mode === "videos" && (
+                  <a
+                    href={`https://www.youtube.com/watch?v=${item.id}`}
+                    target="_blank"
+                    rel="noopener"
+                    className="text-[#0a58ca] text-sm"
+                  >
+                    Watch on YouTube
+                  </a>
+                )}
+
+                {/* Favourites / Reviews / Reports */}
                 {user && (
                   <>
-                    <button onClick={() => toggleFavourite(item, getType(mode))} className="px-2 py-1 mt-2 text-sm rounded-lg border">
-                      {isFavourite(item.id, getType(mode)) ? "★ Remove Favourite" : "☆ Add Favourite"}
+                    <button
+                      onClick={() => toggleFavourite(item, getType(mode))}
+                      className="px-2 py-1 mt-2 text-sm rounded-lg border"
+                    >
+                      {isFavourite(item.id, getType(mode))
+                        ? "★ Remove Favourite"
+                        : "☆ Add Favourite"}
                     </button>
-                    <button onClick={() => { setReviewItem({ ...item, type: getType(mode) }); setShowReviewModal(true); }} className="px-2 py-1 mt-2 text-sm rounded-lg border text-green-600">
+
+                    <button
+                      onClick={() => {
+                        setReviewItem({ ...item, type: getType(mode) });
+                        setShowReviewModal(true);
+                      }}
+                      className="px-2 py-1 mt-2 text-sm rounded-lg border text-green-600"
+                    >
                       Leave Review
+                    </button>
+
+                    <button
+                      onClick={() => reportContent(item, getType(mode))}
+                      className="px-2 py-1 mt-2 text-sm rounded-lg border text-red-600"
+                    >
+                      Report Content
                     </button>
                   </>
                 )}
 
-                {/* Latest 3 Reviews */}
+                {/* Latest Reviews */}
                 <div className="mt-2">
                   {reviewsMap[item.id]?.map((r) => (
                     <div key={r.id} className="border-t border-gray-200 pt-2 mt-2">
-                      <p className="text-sm"><strong>{r.userName}</strong>: {r.content}</p>
+                      <p className="text-sm">
+                        <strong>{r.userName}</strong>: {r.content}
+                      </p>
                       {user && (
-                        <button onClick={() => reportReview(r.id)} className="text-xs text-red-600 underline mt-1">Report</button>
+                        <button
+                          onClick={() => reportReview(r.id)}
+                          className="text-xs text-red-600 underline mt-1"
+                        >
+                          Report Review
+                        </button>
                       )}
                     </div>
                   ))}
@@ -282,9 +398,20 @@ export default function HomePage() {
 
         {/* Pager */}
         <div className="flex gap-2 justify-center mt-6">
-          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1 border rounded-lg disabled:opacity-50">‹ Prev</button>
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-3 py-1 border rounded-lg disabled:opacity-50"
+          >
+            ‹ Prev
+          </button>
           <span>Page {page}</span>
-          <button onClick={() => setPage((p) => p + 1)} className="px-3 py-1 border rounded-lg">Next ›</button>
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            className="px-3 py-1 border rounded-lg"
+          >
+            Next ›
+          </button>
         </div>
       </div>
 
@@ -293,17 +420,33 @@ export default function HomePage() {
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 text-gray-800">
           <div className="bg-white p-6 rounded-xl w-[400px] max-w-full">
             <h2 className="text-xl font-bold mb-3">Leave a Review</h2>
-            <textarea value={reviewContent} onChange={(e) => setReviewContent(e.target.value)} rows={5} className="w-full border p-2 rounded-lg mb-3" placeholder="Write your review here..." />
+            <textarea
+              value={reviewContent}
+              onChange={(e) => setReviewContent(e.target.value)}
+              rows={5}
+              className="w-full border p-2 rounded-lg mb-3"
+              placeholder="Write your review here..."
+            />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setShowReviewModal(false)} className="px-3 py-1 rounded-lg border">Cancel</button>
-              <button onClick={submitReview} className="px-3 py-1 rounded-lg bg-green-600 text-white">Submit</button>
+              <button
+                onClick={() => setShowReviewModal(false)}
+                className="px-3 py-1 rounded-lg border"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitReview}
+                className="px-3 py-1 rounded-lg bg-green-600 text-white"
+              >
+                Submit
+              </button>
             </div>
           </div>
         </div>
-
       )}
-       {/* Chatbot */} 
-      {<Chatbot /> }
+
+      {/* Chatbot */}
+      <Chatbot />
     </main>
   );
 }
