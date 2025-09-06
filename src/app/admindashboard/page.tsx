@@ -2,11 +2,27 @@
 
 import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  addDoc,
+} from "firebase/firestore";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { collection, getDocs, doc, getDoc, updateDoc, deleteDoc, addDoc } from "firebase/firestore";
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, } from "recharts";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import { MdSubscriptions } from "react-icons/md";
 
+// ---------------- Interfaces ----------------
 interface UserData {
   uid: string;
   fullName: string;
@@ -19,7 +35,7 @@ interface ReviewData {
   uid: string;
   userName: string;
   message: string;
-  showOnHome?: boolean; // new field for homepage display toggle
+  showOnHome?: boolean;
 }
 
 interface ContactData {
@@ -43,574 +59,355 @@ interface PlanSummary {
   count: number;
 }
 
+interface Review {
+  id: string;
+  userId: string;
+  userName: string;
+  content: string;
+  itemId: string;
+  type: string;
+  title: string;
+}
+
+interface Report {
+  id: string;
+  reviewId: string;
+  reportedBy: string;
+  reason?: string;
+  createdAt: any;
+  reviewData?: Review;
+}
+
 const COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#f59e0b"];
 
+// ---------------- Component ----------------
 export default function AdminDashboard() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [reviews, setReviews] = useState<ReviewData[]>([]);
   const [contacts, setContacts] = useState<ContactData[]>([]);
   const [plans, setPlans] = useState<PlanData[]>([]);
+  const [planSummary, setPlanSummary] = useState<PlanSummary[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<"users" | "reviews" | "contacts" | "plans" | "subscriptions">("users");
-  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
-  const [editingPlanData, setEditingPlanData] = useState<Partial<PlanData>>({});
-  const [planSummary, setPlanSummary] = useState<PlanSummary[]>([]);
-  const [newPlan, setNewPlan] = useState({ name: "", price: 0, description: "", features: "" });
+  const [activeTab, setActiveTab] = useState<
+    "users" | "reviews" | "contacts" | "plans" | "subscriptions" | "reports"
+  >("users");
+  const [newPlan, setNewPlan] = useState({
+    name: "",
+    price: 0,
+    description: "",
+    features: "",
+  });
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-    });
-    return () => unsubscribe();
-  }, []);
-
+  // ---------------- Fetch Data ----------------
   const fetchUsers = async () => {
-    const usersRef = collection(db, "users");
-    const snapshot = await getDocs(usersRef);
-    const usersList: UserData[] = snapshot.docs.map((doc) => ({
+    const snapshot = await getDocs(collection(db, "users"));
+    const list: UserData[] = snapshot.docs.map((doc) => ({
       ...(doc.data() as UserData),
       uid: doc.id,
     }));
-    setUsers(usersList);
+    setUsers(list);
 
-    // Count users by plan for subscriptions
+    // subscription count
     const counts: Record<string, number> = {};
-    usersList.forEach((user) => {
-      if (user.plan) {
-        counts[user.plan] = (counts[user.plan] || 0) + 1;
-      }
+    list.forEach((u) => {
+      if (u.plan) counts[u.plan] = (counts[u.plan] || 0) + 1;
     });
-    setPlanSummary(
-      Object.entries(counts).map(([plan, count]) => ({
-        plan,
-        count,
-      }))
-    );
+    setPlanSummary(Object.entries(counts).map(([plan, count]) => ({ plan, count })));
   };
 
-
   const fetchReviews = async () => {
-    const reviewsRef = collection(db, "reviews");
-    const snapshot = await getDocs(reviewsRef);
-    const reviewsList: ReviewData[] = snapshot.docs.map((doc) => ({
-      ...(doc.data() as ReviewData),
-      uid: doc.id,
-    }));
-    setReviews(reviewsList);
+    const snapshot = await getDocs(collection(db, "reviews"));
+    setReviews(snapshot.docs.map((doc) => ({ ...(doc.data() as ReviewData), uid: doc.id })));
   };
 
   const fetchContacts = async () => {
-    const contactsRef = collection(db, "contacts");
-    const snapshot = await getDocs(contactsRef);
-    const contactsList: ContactData[] = snapshot.docs.map((doc) => ({
-      ...(doc.data() as ContactData),
-      uid: doc.id,
-    }));
-    setContacts(contactsList);
+    const snapshot = await getDocs(collection(db, "contacts"));
+    setContacts(snapshot.docs.map((doc) => ({ ...(doc.data() as ContactData), uid: doc.id })));
   };
 
   const fetchPlans = async () => {
     const snapshot = await getDocs(collection(db, "plans"));
     setPlans(snapshot.docs.map((doc) => ({ ...(doc.data() as PlanData), id: doc.id })));
   };
-  
-const handleAddPlan = async (e: React.MouseEvent<HTMLButtonElement>) => {
-  e.preventDefault(); // prevent page reload if inside a form
-if (!newPlan.name || newPlan.price < 0) {
-  alert("Plan name is required and price cannot be negative");
-  return;
-}
-  try {
+
+  const fetchReports = async () => {
+    const snap = await getDocs(collection(db, "reports"));
+    const temp: Report[] = [];
+
+    for (const d of snap.docs) {
+      const data = d.data();
+      const reviewRef = doc(db, "books-video-reviews", data.reviewId);
+      const reviewSnap = await getDoc(reviewRef);
+
+      let reviewData: Review | undefined;
+      if (reviewSnap.exists()) {
+        const r = reviewSnap.data();
+        reviewData = {
+          id: reviewSnap.id,
+          userId: r.userId || "",
+          userName: r.userName || "Anonymous",
+          content: r.content || "",
+          itemId: r.itemId || "",
+          type: r.type || "",
+          title: r.title || "",
+        };
+      }
+
+      temp.push({
+        id: d.id,
+        reviewId: data.reviewId,
+        reportedBy: data.reportedBy,
+        reason: data.reason,
+        createdAt: data.createdAt,
+        reviewData,
+      });
+    }
+
+    setReports(temp);
+  };
+
+  // ---------------- Actions ----------------
+  const handleDeleteUser = async (uid: string) => {
+    await deleteDoc(doc(db, "users", uid));
+    setUsers((prev) => prev.filter((u) => u.uid !== uid));
+  };
+
+  const handleToggleUser = async (uid: string, role?: string) => {
+    const newRole = role === "inactive" ? "user" : "inactive";
+    await updateDoc(doc(db, "users", uid), { role: newRole });
+    setUsers((prev) => prev.map((u) => (u.uid === uid ? { ...u, role: newRole } : u)));
+  };
+
+  const handleToggleShowOnHome = async (id: string, current: boolean) => {
+    await updateDoc(doc(db, "reviews", id), { showOnHome: !current });
+    fetchReviews();
+  };
+
+  const handleAddPlan = async (e: React.FormEvent) => {
+    e.preventDefault();
     await addDoc(collection(db, "plans"), {
       name: newPlan.name,
       price: newPlan.price,
       description: newPlan.description,
-      features: newPlan.features.split(",").map(f => f.trim()),
+      features: newPlan.features.split(",").map((f) => f.trim()),
     });
     setNewPlan({ name: "", price: 0, description: "", features: "" });
-    await fetchPlans(); // fetch after adding
-  } catch (err) {
-    console.error("Error adding plan:", err);
-    alert("Failed to add plan");
-  }
-};
-
+    fetchPlans();
+  };
 
   const handleDeletePlan = async (id: string) => {
     await deleteDoc(doc(db, "plans", id));
     fetchPlans();
   };
 
-  const handleToggleShowOnHome = async (id: string, current: boolean) => {
-    const reviewRef = doc(db, "reviews", id);
-    await updateDoc(reviewRef, { showOnHome: !current });
-    fetchReviews();
+  const handleDeleteReport = async (id: string) => {
+    await deleteDoc(doc(db, "reports", id));
+    setReports((prev) => prev.filter((r) => r.id !== id));
   };
 
+  const handleDeleteReviewAndReport = async (report: Report) => {
+    await deleteDoc(doc(db, "reports", report.id));
+    if (report.reviewData) {
+      await deleteDoc(doc(db, "books-video-reviews", report.reviewId));
+    }
+    setReports((prev) => prev.filter((r) => r.id !== report.id));
+  };
+
+  const exportCSV = () => {
+    if (!planSummary.length) return;
+    const header = ["Plan", "Active Users"];
+    const rows = planSummary.map((p) => [p.plan, p.count]);
+    const csv = [header, ...rows].map((e) => e.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "subscription_report.csv");
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ---------------- Auth + Init ----------------
   useEffect(() => {
-    const checkAdmin = async () => {
-      if (!currentUser) return;
-
-      try {
-        const userRef = doc(db, "users", currentUser.uid);
-        const userSnap = await getDoc(userRef);
-
-        if (userSnap.exists() && userSnap.data().role === "admin") {
-          await fetchUsers();
-          await fetchReviews();
-          await fetchContacts();
-          await fetchPlans();
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      setCurrentUser(u);
+      if (u) {
+        const snap = await getDoc(doc(db, "users", u.uid));
+        const role = snap.exists() ? snap.data()?.role : null;
+        if (role === "admin") {
+          await Promise.all([fetchUsers(), fetchReviews(), fetchContacts(), fetchPlans(), fetchReports()]);
         } else {
           setError("You do not have permission to view this page.");
         }
-      } catch (err) {
-        console.error(err);
-        setError("Failed to check user role.");
-      } finally {
-        setLoading(false);
       }
-    };
-
-    checkAdmin();
-  }, [currentUser]);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
 
   if (loading) return <p className="p-6">Loading...</p>;
   if (error) return <p className="p-6 text-red-600">{error}</p>;
 
-  const handleDeleteUser = async (uid: string) => {
-  try {
-    await deleteDoc(doc(db, "users", uid));
-    setUsers(users.filter((u) => u.uid !== uid));
-  } catch (err) {
-    console.error("Error deleting user:", err);
-    alert("Failed to delete user");
-  }
-};
-
-const handleDeactivateUser = async (uid: string) => {
-  try {
-    const userRef = doc(db, "users", uid);
-    await updateDoc(userRef, { role: "inactive" }); // Or { active: false }
-    setUsers(users.map((u) => (u.uid === uid ? { ...u, role: "inactive" } : u)));
-  } catch (err) {
-    console.error("Error deactivating user:", err);
-    alert("Failed to deactivate user");
-  }
-};
-
-const handleToggleActiveUser = async (uid: string, currentRole: string | undefined) => {
-  try {
-    const newRole = currentRole === "inactive" ? "user" : "inactive"; // toggle
-    const userRef = doc(db, "users", uid);
-    await updateDoc(userRef, { role: newRole });
-    setUsers(users.map((u) => (u.uid === uid ? { ...u, role: newRole } : u)));
-  } catch (err) {
-    console.error("Error toggling user status:", err);
-    alert("Failed to update user status");
-  }
-};
-
-const exportCSV = () => {
-  if (!planSummary || planSummary.length === 0) return;
-  const header = ["Plan", "Active Users"];
-  const rows = planSummary.map((p) => [p.plan, p.count]);
-  const csvContent = [header, ...rows].map((e) => e.join(",")).join("\n");
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute("download", "subscription_report.csv");
-  link.click();
-  URL.revokeObjectURL(url);
-};
-
-
-
-
+  // ---------------- Render ----------------
   return (
-    <main className="bg-white min-h-screen p-6 flex">
-      {/* Sidebar Tabs */}
+    <main className="bg-white min-h-screen p-6 flex text-gray-800">
+      {/* Sidebar */}
       <aside className="w-64 mr-8 border-r border-gray-200 text-gray-800">
         <ul className="space-y-2">
-          <li
-            className={`cursor-pointer px-4 py-2 rounded ${activeTab === "users" ? "bg-pink-100 font-semibold" : "hover:bg-gray-100"}`}
-            onClick={() => setActiveTab("users")}
-          >
-            Users
-          </li>
-          <li
-            className={`cursor-pointer px-4 py-2 rounded ${activeTab === "reviews" ? "bg-pink-100 font-semibold" : "hover:bg-gray-100"}`}
-            onClick={() => setActiveTab("reviews")}
-          >
-            Reviews
-          </li>
-          <li
-            className={`cursor-pointer px-4 py-2 rounded ${activeTab === "contacts" ? "bg-pink-100 font-semibold" : "hover:bg-gray-100"}`}
-            onClick={() => setActiveTab("contacts")}
-          >
-            Comments
-          </li>
-          <li
-            className={`cursor-pointer px-4 py-2 rounded ${activeTab === "plans" ? "bg-pink-100 font-semibold" : "hover:bg-gray-100"}`}
-            onClick={() => setActiveTab("plans")}
-          >
-            Plans
-          </li>
-                    <li
-            className={`cursor-pointer px-4 py-2 rounded ${activeTab === "subscriptions" ? "bg-pink-100 font-semibold" : "hover:bg-gray-100"}`}
-            onClick={() => setActiveTab("subscriptions")}
-          >
-            Subscriptions Dashboard
-          </li>
+          {["users","reviews","contacts","plans","subscriptions","reports"].map((tab) => (
+            <li
+              key={tab}
+              className={`cursor-pointer px-4 py-2 rounded ${
+                activeTab === tab ? "bg-pink-100 font-semibold" : "hover:bg-gray-100"
+              }`}
+              onClick={() => setActiveTab(tab as any)}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </li>
+          ))}
         </ul>
       </aside>
 
-      {/* Main Content */}
+      {/* Content */}
       <section className="flex-1">
+        {/* Users */}
         {activeTab === "users" && (
           <section>
-            <h1 className="text-3xl font-bold text-pink-600 mb-6">Admin Dashboard - Users</h1>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-300 text-gray-600">
-                <thead className="bg-pink-50">
-                  <tr>
-                    <th className="border px-4 py-2 text-left text-gray-800">#</th>
-                    <th className="border px-4 py-2 text-left text-gray-800">Full Name</th>
-                    <th className="border px-4 py-2 text-left text-gray-800">Email</th>
-                    <th className="border px-4 py-2 text-left text-gray-800">Role</th>
-                    <th className="border px-4 py-2 text-left text-gray-800">Status</th>
-                    <th className="border px-4 py-2 text-left text-gray-800">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((user, index) => (
-                    <tr key={user.uid} className="hover:bg-gray-50">
-                      <td className="border px-4 py-2">{index + 1}</td>
-                      <td className="border px-4 py-2">{user.fullName}</td>
-                      <td className="border px-4 py-2">{user.email}</td>
-                      <td className="border px-4 py-2">{user.role || "user"}</td>
-                      <td className="border px-4 py-2 space-x-2">
-                        <button
-                          onClick={() => handleToggleActiveUser(user.uid, user.role)}
-                          className={`px-3 py-1 rounded text-white ${
-                            user.role === "inactive" ? "bg-green-600 hover:bg-green-700" : "bg-yellow-500 hover:bg-yellow-600"
-                          }`}
-                        >
-                          {user.role === "inactive" ? "Activate" : "Deactivate"}
-                        </button>
-                      </td>
-                      <td className="border px-4 py-2 space-x-2">
-                        <button
-                          onClick={() => handleDeleteUser(user.uid)}
-                          className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {activeTab === "reviews" && (
-          <section>
-            <h2 className="text-3xl font-bold text-pink-600 mb-6">Manage Reviews</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-300 text-gray-600">
-                <thead className="bg-pink-50">
-                  <tr>
-                    <th className="border px-4 py-2">Name</th>
-                    <th className="border px-4 py-2">Message</th>
-                    <th className="border px-4 py-2">Show on Home</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reviews.map((r) => (
-                    <tr key={r.uid} className="hover:bg-gray-50">
-                      <td className="border px-4 py-2">{r.userName}</td>
-                      <td className="border px-4 py-2">{r.message}</td>
-                      <td className="border px-4 py-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={!!r.showOnHome}
-                          onChange={() => handleToggleShowOnHome(r.uid, !!r.showOnHome)}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {/* Contacts Tab */}
-        {activeTab === "contacts" && (
-          <section>
-            <h2 className="text-3xl font-bold text-pink-600 mb-6">Contact Comments</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-300 text-gray-600">
-                <thead className="bg-pink-50">
-                  <tr>
-                    <th className="border px-4 py-2">Name</th>
-                    <th className="border px-4 py-2">Email</th>
-                    <th className="border px-4 py-2">Message</th>
-                    <th className="border px-4 py-2">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {contacts.map((c) => (
-                    <tr key={c.uid} className="hover:bg-gray-50">
-                      <td className="border px-4 py-2">{c.name}</td>
-                      <td className="border px-4 py-2">{c.email}</td>
-                      <td className="border px-4 py-2">{c.message}</td>
-                      <td className="border px-4 py-2">
-                        {c.createdAt?.toDate?.() ? c.createdAt.toDate().toLocaleString() : c.createdAt}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {/* Plans Tab */}
-        {activeTab === "plans" && (
-          <section>
-            <h2 className="text-3xl font-bold text-pink-600 mb-6">Manage Subscription Plans</h2>
-
-            {/* Add New Plan */}
-            <div className="mb-6 p-4 border rounded bg-gray-50 text-gray-600">
-              <h3 className="font-semibold mb-2">Add New Plan</h3>
-              <div className="flex flex-col gap-2">
-                <input
-                  className="border p-2 rounded"
-                  placeholder="Plan Name"
-                  value={newPlan.name}
-                  onChange={(e) => setNewPlan({ ...newPlan, name: e.target.value })}
-                />
-                <input
-                  type="number"
-                  className="border p-2 rounded"
-                  placeholder="Price"
-                  value={newPlan.price}
-                  onChange={(e) => setNewPlan({ ...newPlan, price: Number(e.target.value) })}
-                />
-                <input
-                  className="border p-2 rounded"
-                  placeholder="Description"
-                  value={newPlan.description}
-                  onChange={(e) => setNewPlan({ ...newPlan, description: e.target.value })}
-                />
-                <input
-                  className="border p-2 rounded"
-                  placeholder="Features (comma separated)"
-                  value={newPlan.features}
-                  onChange={(e) => setNewPlan({ ...newPlan, features: e.target.value })}
-                />
-                <button
-                  onClick={handleAddPlan}
-                  className="bg-pink-600 text-white px-4 py-2 rounded hover:bg-pink-700"
-                >
-                  Add Plan
-                </button>
-              </div>
-            </div>
-
-          {/* Plans Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse border border-gray-300 text-gray-600">
-              <thead className="bg-pink-50">
-                <tr>
-                  <th className="border px-4 py-2">Name</th>
-                  <th className="border px-4 py-2">Price</th>
-                  <th className="border px-4 py-2">Description</th>
-                  <th className="border px-4 py-2">Features</th>
-                  <th className="border px-4 py-2">Actions</th>
+            <h2 className="text-2xl font-bold text-pink-600 mb-6">Users</h2>
+            <table className="w-full border">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="p-2">Name</th>
+                  <th className="p-2">Email</th>
+                  <th className="p-2">Role</th>
+                  <th className="p-2">Plan</th>
+                  <th className="p-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {plans.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50">
-                    {/* Name */}
-                    <td className="border px-4 py-2">
-                      {editingPlanId === p.id ? (
-                        <input
-                          type="text"
-                          value={editingPlanData.name || ""}
-                          onChange={(e) => setEditingPlanData({ ...editingPlanData, name: e.target.value })}
-                          className="border px-2 py-1 rounded w-full"
-                        />
-                      ) : (
-                        p.name
-                      )}
-                    </td>
-
-                    {/* Price */}
-                    <td className="border px-4 py-2">
-                      {editingPlanId === p.id ? (
-                        <input
-                          type="number"
-                          value={editingPlanData.price || 0}
-                          onChange={(e) => setEditingPlanData({ ...editingPlanData, price: Number(e.target.value) })}
-                          className="border px-2 py-1 rounded w-full"
-                        />
-                      ) : (
-                        `$${p.price}`
-                      )}
-                    </td>
-
-                    {/* Description */}
-                    <td className="border px-4 py-2">
-                      {editingPlanId === p.id ? (
-                        <input
-                          type="text"
-                          value={editingPlanData.description || ""}
-                          onChange={(e) => setEditingPlanData({ ...editingPlanData, description: e.target.value })}
-                          className="border px-2 py-1 rounded w-full"
-                        />
-                      ) : (
-                        p.description
-                      )}
-                    </td>
-
-                    {/* Features */}
-                    <td className="border px-4 py-2">
-                      {editingPlanId === p.id ? (
-                        <input
-                          type="text"
-                          value={editingPlanData.features?.join(", ") || ""}
-                          onChange={(e) =>
-                            setEditingPlanData({ ...editingPlanData, features: e.target.value.split(",").map(f => f.trim()) })
-                          }
-                          className="border px-2 py-1 rounded w-full"
-                        />
-                      ) : (
-                        p.features.join(", ")
-                      )}
-                    </td>
-
-                    {/* Actions */}
-                    <td className="border px-4 py-2 space-x-2">
-                      {editingPlanId === p.id ? (
-                        <>
-                          <button
-                            onClick={async () => {
-                              if (!editingPlanId) return;
-                              const planRef = doc(db, "plans", editingPlanId);
-                              await updateDoc(planRef, editingPlanData);
-                              setEditingPlanId(null);
-                              fetchPlans();
-                            }}
-                            className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setEditingPlanId(null)}
-                            className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500"
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => {
-                              setEditingPlanId(p.id);
-                              setEditingPlanData(p);
-                            }}
-                            className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeletePlan(p.id)}
-                            className="text-red-600 hover:underline px-3 py-1"
-                          >
-                            Delete
-                          </button>
-                        </>
-                      )}
+                {users.map((u) => (
+                  <tr key={u.uid} className="border-t">
+                    <td className="p-2">{u.fullName}</td>
+                    <td className="p-2">{u.email}</td>
+                    <td className="p-2">{u.role}</td>
+                    <td className="p-2">{u.plan || "—"}</td>
+                    <td className="p-2 flex gap-2">
+                      <button onClick={() => handleToggleUser(u.uid, u.role)} className="px-2 py-1 bg-blue-500 text-white rounded">
+                        {u.role === "inactive" ? "Activate" : "Deactivate"}
+                      </button>
+                      <button onClick={() => handleDeleteUser(u.uid)} className="px-2 py-1 bg-red-500 text-white rounded">
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
           </section>
         )}
 
-          {/* Subscriptions */}
+        {/* Reviews */}
+        {activeTab === "reviews" && (
+          <section>
+            <h2 className="text-2xl font-bold text-pink-600 mb-6">Reviews</h2>
+            <ul className="space-y-4">
+              {reviews.map((r) => (
+                <li key={r.uid} className="p-4 border rounded">
+                  <p><strong>{r.userName}</strong>: {r.message}</p>
+                  <button
+                    onClick={() => handleToggleShowOnHome(r.uid, !!r.showOnHome)}
+                    className="mt-2 px-2 py-1 bg-green-500 text-white rounded"
+                  >
+                    {r.showOnHome ? "Hide from Home" : "Show on Home"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Contacts */}
+        {activeTab === "contacts" && (
+          <section>
+            <h2 className="text-2xl font-bold text-pink-600 mb-6">Contacts</h2>
+            <ul className="space-y-4">
+              {contacts.map((c) => (
+                <li key={c.uid} className="p-4 border rounded">
+                  <p><strong>{c.name}</strong> ({c.email})</p>
+                  <p>{c.message}</p>
+                  <p className="text-sm text-gray-500">
+                    {c.createdAt?.toDate ? c.createdAt.toDate().toLocaleString() : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Plans */}
+        {activeTab === "plans" && (
+          <section>
+            <h2 className="text-2xl font-bold text-pink-600 mb-6">Plans</h2>
+            <form onSubmit={handleAddPlan} className="space-y-2 mb-6">
+              <input value={newPlan.name} onChange={(e) => setNewPlan({ ...newPlan, name: e.target.value })} placeholder="Name" className="border p-2 w-full" />
+              <input type="number" value={newPlan.price} onChange={(e) => setNewPlan({ ...newPlan, price: Number(e.target.value) })} placeholder="Price" className="border p-2 w-full" />
+              <textarea value={newPlan.description} onChange={(e) => setNewPlan({ ...newPlan, description: e.target.value })} placeholder="Description" className="border p-2 w-full" />
+              <input value={newPlan.features} onChange={(e) => setNewPlan({ ...newPlan, features: e.target.value })} placeholder="Features (comma-separated)" className="border p-2 w-full" />
+              <button type="submit" className="px-3 py-1 bg-pink-600 text-white rounded">Add Plan</button>
+            </form>
+            <ul className="space-y-4">
+              {plans.map((p) => (
+                <li key={p.id} className="p-4 border rounded flex justify-between items-center">
+                  <div>
+                    <p className="font-bold">{p.name} - ${p.price}</p>
+                    <p>{p.description}</p>
+                    <ul className="list-disc pl-5 text-sm text-gray-600">
+                      {p.features.map((f, i) => <li key={i}>{f}</li>)}
+                    </ul>
+                  </div>
+                  <button onClick={() => handleDeletePlan(p.id)} className="px-3 py-1 bg-red-500 text-white rounded">Delete</button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Subscriptions */}
         {activeTab === "subscriptions" && (
           <section>
-            <h1 className="text-3xl font-bold text-pink-600 mb-8 flex items-center gap-2">
-              <MdSubscriptions className="text-pink-600" /> Subscription
-              Overview
-            </h1>
-
+            <h2 className="text-2xl font-bold text-pink-600 mb-6 flex items-center gap-2">
+              <MdSubscriptions /> Subscriptions
+            </h2>
             {planSummary.length === 0 ? (
-              <div className="bg-white p-6 rounded-xl shadow text-center">
-                <p className="text-gray-600">No users with a plan found.</p>
-              </div>
+              <p>No subscriptions yet.</p>
             ) : (
               <>
-                {/* Cards */}
                 <div className="grid md:grid-cols-3 gap-6 mb-12">
-                  {planSummary.map((plan, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-white p-6 rounded-xl shadow hover:shadow-lg transition text-center"
-                    >
-                      <h2 className="text-xl font-semibold text-gray-800">
-                        {plan.plan}
-                      </h2>
-                      <p className="text-3xl font-bold text-pink-600 mt-3">
-                        {plan.count}
-                      </p>
-                      <p className="text-gray-500">Users</p>
+                  {planSummary.map((p, i) => (
+                    <div key={i} className="p-6 bg-white border rounded shadow text-center">
+                      <h3 className="font-bold">{p.plan}</h3>
+                      <p className="text-2xl text-pink-600">{p.count}</p>
                     </div>
                   ))}
                 </div>
-
-                <div className="flex justify-end mb-4">
-                  <button
-                    onClick={exportCSV}
-                    className="bg-pink-600 text-white px-4 py-2 rounded-md hover:bg-pink-700 transition"
-                  >
-                    Export Subscription Report
-                  </button>
-                </div>
-
-                {/* Pie Chart */}
-                <div className="bg-white p-6 rounded-xl shadow h-[400px]">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                    Plan Distribution
-                  </h2>
+                <button onClick={exportCSV} className="mb-6 px-4 py-2 bg-pink-600 text-white rounded">
+                  Export CSV
+                </button>
+                <div className="h-[400px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={planSummary}
                         dataKey="count"
                         nameKey="plan"
-                        cx="50%"
-                        cy="50%"
                         outerRadius={120}
-                        label={({ name, value }) => `${name}: ${value}`}
+                        label
                       >
-                        {planSummary.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={COLORS[index % COLORS.length]}
-                            stroke="#fff"
-                            strokeWidth={2}
-                          />
+                        {planSummary.map((_, i) => (
+                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
                         ))}
                       </Pie>
                       <Tooltip />
@@ -619,6 +416,50 @@ const exportCSV = () => {
                   </ResponsiveContainer>
                 </div>
               </>
+            )}
+          </section>
+        )}
+
+        {/* Reports */}
+        {activeTab === "reports" && (
+          <section>
+            <h2 className="text-2xl font-bold text-pink-600 mb-6">Reported Reviews</h2>
+            {reports.length === 0 ? (
+              <p>No reports yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {reports.map((r) => (
+                  <div key={r.id} className="p-4 border rounded bg-gray-50">
+                    <p><strong>Reported by:</strong> {r.reportedBy}</p>
+                    {r.reason && <p><strong>Reason:</strong> {r.reason}</p>}
+                    <p>
+                      <strong>At:</strong>{" "}
+                      {r.createdAt?.toDate
+                        ? r.createdAt.toDate().toLocaleString()
+                        : new Date(r.createdAt).toLocaleString()}
+                    </p>
+                    {r.reviewData ? (
+                      <div className="mt-2 p-2 border rounded bg-white">
+                        <p><strong>Review by:</strong> {r.reviewData.userName}</p>
+                        <p>{r.reviewData.content}</p>
+                        <p>{r.reviewData.title} ({r.reviewData.type})</p>
+                      </div>
+                    ) : (
+                      <p className="text-red-500 mt-2">Original review deleted</p>
+                    )}
+                    <div className="flex gap-2 mt-3">
+                      <button onClick={() => handleDeleteReport(r.id)} className="px-3 py-1 bg-red-500 text-white rounded">
+                        Delete Report
+                      </button>
+                      {r.reviewData && (
+                        <button onClick={() => handleDeleteReviewAndReport(r)} className="px-3 py-1 bg-red-700 text-white rounded">
+                          Delete Review & Report
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </section>
         )}
