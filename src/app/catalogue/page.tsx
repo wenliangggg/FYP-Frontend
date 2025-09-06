@@ -1,5 +1,6 @@
 "use client";
 
+import Chatbot from "../components/Chatbot";
 import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
@@ -299,7 +300,10 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+
       )}
+       {/* Chatbot */} 
+      {<Chatbot /> }
     </main>
   );
 }
