@@ -1,7 +1,7 @@
 'use client';
 
 import Chatbot from "../components/Chatbot";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
 import {
@@ -18,20 +18,22 @@ import {
   Timestamp,
 } from "firebase/firestore";
 
+// ---------- Types ----------
 interface Book {
   id: string;
   title: string;
-  authors: string[];
-  infoLink: string;
-  thumbnail: string | null;
+  authors?: string[];
+  synopsis?: string;
+  infoLink?: string;
+  thumbnail?: string | null;
   buckets?: string[];
 }
 
 interface Video {
   id: string;
   title: string;
-  description: string;
-  thumbnail: string;
+  description?: string;
+  thumbnail?: string;
   channel?: string;
   url?: string;
 }
@@ -43,6 +45,7 @@ interface Review {
   content: string;
 }
 
+// ---------- Shelves ----------
 const shelves = [
   { key: "", label: "All" },
   { key: "juvenile_fiction", label: "Fiction" },
@@ -57,6 +60,15 @@ const shelves = [
   { key: "young_adult", label: "Young Adult" },
 ];
 
+// ---------- Type guards ----------
+function isBook(item: Book | Video): item is Book {
+  return (item as Book).infoLink !== undefined;
+}
+function isVideo(item: Book | Video): item is Video {
+  return (item as Video).channel !== undefined;
+}
+
+// ---------- Component ----------
 export default function HomePage() {
   const [mode, setMode] = useState<"books" | "videos">("books");
   const [queryText, setQueryText] = useState("");
@@ -68,16 +80,19 @@ export default function HomePage() {
 
   const [user, setUser] = useState<User | null>(null);
   const [favourites, setFavourites] = useState<any[]>([]);
-  const [reviewItem, setReviewItem] = useState<any>(null);
-  const [reviewContent, setReviewContent] = useState("");
-  const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewsMap, setReviewsMap] = useState<Record<string, Review[]>>({});
 
-  const pageSize = 20;
+  const [selectedItem, setSelectedItem] = useState<Book | Video | null>(null);
+  const [reviewContent, setReviewContent] = useState("");
+
+  const reviewRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const pageSize = 12;
 
   const getType = (m: "books" | "videos"): "book" | "video" =>
     m === "books" ? "book" : "video";
 
+  // ---------- Auth ----------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -87,12 +102,99 @@ export default function HomePage() {
     return () => unsub();
   }, []);
 
+  // ---------- Search ----------
+  useEffect(() => {
+    search();
+  }, [mode, page, bucket]);
+
+  async function search() {
+    setLoading(true);
+    try {
+      if (mode === "books") {
+        const params = new URLSearchParams({
+          q: queryText || "children books",
+          startIndex: String((page - 1) * pageSize),
+          maxResults: String(pageSize),
+          key: process.env.NEXT_PUBLIC_BOOKS_API_KEY || "",
+        });
+        const res = await fetch(
+          `https://www.googleapis.com/books/v1/volumes?${params.toString()}`
+        );
+        const data = await res.json();
+
+        const mapped: Book[] = (data.items || []).map((b: any) => ({
+          id: b.id,
+          title: b.volumeInfo.title,
+          authors: b.volumeInfo.authors,
+          synopsis: b.volumeInfo.description,
+          thumbnail: b.volumeInfo.imageLinks?.thumbnail || null,
+          infoLink: b.volumeInfo.infoLink,
+          buckets: b.volumeInfo.categories || [],
+        }));
+
+        const filtered = bucket
+          ? mapped.filter((b) => b.buckets?.includes(bucket))
+          : mapped;
+
+        setBooks(filtered);
+        filtered.forEach((b) => loadReviewsForItem(b.id));
+      } else {
+        const params = new URLSearchParams({
+          q: queryText || "stories for kids",
+          part: "snippet",
+          maxResults: String(pageSize),
+          type: "video",
+          key: process.env.NEXT_PUBLIC_YOUTUBE_API_KEY || "",
+        });
+
+        const res = await fetch(
+          `https://www.googleapis.com/youtube/v3/search?${params.toString()}`
+        );
+        const data = await res.json();
+
+        const videoIds = (data.items || [])
+          .map((i: any) => i.id?.videoId)
+          .filter(Boolean);
+
+        if (videoIds.length > 0) {
+          const detailsRes = await fetch(
+            `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoIds.join(
+              ","
+            )}&key=${process.env.NEXT_PUBLIC_YOUTUBE_API_KEY}`
+          );
+          const detailsData = await detailsRes.json();
+
+          const mappedVideos: Video[] = (detailsData.items || []).map((v: any) => ({
+            id: v.id,
+            title: v.snippet.title,
+            description: v.snippet.description,
+            thumbnail: v.snippet.thumbnails?.medium?.url,
+            channel: v.snippet.channelTitle,
+            url: `https://www.youtube.com/watch?v=${v.id}`,
+          }));
+
+          setVideos(mappedVideos);
+          mappedVideos.forEach((v) => loadReviewsForItem(v.id));
+        } else {
+          setVideos([]);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setLoading(false);
+  }
+
+  // ---------- Favourites ----------
   async function loadFavourites(uid: string) {
-    if (!uid) return;
     const snap = await getDocs(collection(db, "users", uid, "favourites"));
     const favs: any[] = [];
     snap.forEach((doc) => favs.push(doc.data()));
     setFavourites(favs);
+  }
+
+  function isFavourite(id: string, type: "book" | "video") {
+    return favourites.some((f) => f.id === id && f.type === type);
   }
 
   async function toggleFavourite(item: any, type: "book" | "video") {
@@ -105,34 +207,30 @@ export default function HomePage() {
       setFavourites(favourites.filter((f) => !(f.id === item.id && f.type === type)));
     } else {
       const newFav: any = { id: item.id, type, title: item.title || "" };
-      if (item.thumbnail) newFav.thumbnail = item.thumbnail;
-      if (item.authors) newFav.authors = item.authors;
-      if (item.channel) newFav.channel = item.channel;
-      if (item.infoLink) newFav.infoLink = item.infoLink;
+      if ("thumbnail" in item && item.thumbnail) newFav.thumbnail = item.thumbnail;
+      if ("authors" in item && item.authors) newFav.authors = item.authors;
+      if ("channel" in item && item.channel) newFav.channel = item.channel;
+      if ("infoLink" in item && item.infoLink) newFav.infoLink = item.infoLink;
 
       await setDoc(ref, newFav);
       setFavourites([...favourites, newFav]);
     }
   }
 
-  function isFavourite(id: string, type: "book" | "video") {
-    return favourites.some((f) => f.id === id && f.type === type);
-  }
-
+  // ---------- Reviews ----------
   async function submitReview() {
-    if (!user || !reviewItem) return;
+    if (!user || !selectedItem) return;
     await addDoc(collection(db, "books-video-reviews"), {
       userId: user.uid,
       userName: user.displayName || "Anonymous",
-      itemId: reviewItem.id,
-      type: reviewItem.type,
-      title: reviewItem.title,
+      itemId: selectedItem.id,
+      type: getType(mode),
+      title: selectedItem.title,
       content: reviewContent,
       createdAt: Timestamp.now(),
     });
-    setShowReviewModal(false);
     setReviewContent("");
-    await loadReviewsForItem(reviewItem.id);
+    await loadReviewsForItem(selectedItem.id);
   }
 
   async function loadReviewsForItem(itemId: string) {
@@ -176,6 +274,7 @@ export default function HomePage() {
     alert("Content reported. Admin will review it.");
   }
 
+  // ---------- Utils ----------
   function getInitials(title: string) {
     if (!title) return "?";
     const words = title.trim().split(" ");
@@ -192,51 +291,14 @@ export default function HomePage() {
     return colors[Math.abs(hash) % colors.length];
   }
 
-  // --- SEARCH ---
-  useEffect(() => {
-    search();
-  }, [mode, page, bucket]);
+  const handleLeaveReview = () => {
+    setTimeout(() => {
+      reviewRef.current?.scrollIntoView({ behavior: "smooth" });
+      reviewRef.current?.focus();
+    }, 100);
+  };
 
-  async function search() {
-    setLoading(true);
-    try {
-      if (mode === "books") {
-        const params = new URLSearchParams({
-          q: queryText,
-          bucket,
-          lang: "en",
-          page: String(page),
-          pageSize: String(pageSize),
-        });
-        if (bucket === "young_adult") params.append("includeYA", "1");
-
-        const res = await fetch(`/catalogue/books?${params.toString()}`);
-        const data = await res.json();
-
-        // Client-side filter backup: only include books with selected bucket
-        const filtered = bucket
-          ? data.items.filter((b: Book) => b.buckets?.includes(bucket))
-          : data.items;
-
-        setBooks(filtered);
-        data.items?.forEach((b: any) => loadReviewsForItem(b.id));
-      } else {
-        const params = new URLSearchParams({
-          q: queryText || "stories for kids",
-          page: String(page),
-          pageSize: String(pageSize),
-        });
-        const res = await fetch(`/catalogue/videos?${params.toString()}`);
-        const data = await res.json();
-        setVideos(data.items || []);
-        data.items?.forEach((v: any) => loadReviewsForItem(v.id));
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    setLoading(false);
-  }
-
+  // ---------- Render ----------
   return (
     <main className="bg-white">
       <div className="max-w-[1100px] mx-auto p-6 font-sans text-[#111]">
@@ -275,7 +337,7 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* Shelves (books only) */}
+        {/* Shelves */}
         {mode === "books" && (
           <div className="flex flex-wrap gap-2 mb-4">
             {shelves.map((s) => (
@@ -295,74 +357,185 @@ export default function HomePage() {
         )}
 
         {/* Results */}
-        {loading ? <p>Loading…</p> : (
+        {loading ? (
+          <p>Loading…</p>
+        ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
             {(mode === "books" ? books : videos).length === 0 ? (
               <p>No items found.</p>
-            ) : (mode === "books" ? books : videos).map((item: any) => (
-              <div key={item.id} className="border border-[#eee] rounded-xl p-3 flex flex-col gap-2">
-                {item.thumbnail ? (
-                  <img src={item.thumbnail} alt={item.title} className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]" />
-                ) : (
-                  <div className="w-full h-[165px] flex items-center justify-center rounded-lg text-white text-xl font-bold"
-                    style={{ backgroundColor: getColor(item.id || item.title) }}>
-                    {getInitials(item.title)}
-                  </div>
-                )}
-                <div>
-                  <strong>{item.title}</strong>
-                  {mode === "books" && <div className="text-sm text-[#666]">{item.authors?.join(", ") || "Unknown author"}</div>}
-                  {mode === "videos" && <div className="text-sm text-[#666]">{item.channel || ""}</div>}
-                </div>
-                {item.infoLink && <a href={item.infoLink} target="_blank" rel="noopener" className="text-[#0a58ca] text-sm">View on Google Books</a>}
-                {item.id && mode === "videos" && <a href={`https://www.youtube.com/watch?v=${item.id}`} target="_blank" rel="noopener" className="text-[#0a58ca] text-sm">Watch on YouTube</a>}
-
-                {user && <>
-                  <button onClick={() => toggleFavourite(item, getType(mode))} className="px-2 py-1 mt-2 text-sm rounded-lg border">
-                    {isFavourite(item.id, getType(mode)) ? "★ Remove Favourite" : "☆ Add Favourite"}
-                  </button>
-                  <button onClick={() => { setReviewItem({ ...item, type: getType(mode) }); setShowReviewModal(true); }}
-                    className="px-2 py-1 mt-2 text-sm rounded-lg border text-green-600">Leave Review</button>
-                  <button onClick={() => reportContent(item, getType(mode))}
-                    className="px-2 py-1 mt-2 text-sm rounded-lg border text-red-600">Report Content</button>
-                </>}
-
-                <div className="mt-2">
-                  {reviewsMap[item.id]?.map((r) => (
-                    <div key={r.id} className="border-t border-gray-200 pt-2 mt-2">
-                      <p className="text-sm"><strong>{r.userName}</strong>: {r.content}</p>
-                      {user && <button onClick={() => reportReview(r.id)} className="text-xs text-red-600 underline mt-1">Report Review</button>}
+            ) : (
+              (mode === "books" ? books : videos).map((item: Book | Video) => (
+                <div
+                  key={item.id}
+                  className="border border-[#eee] rounded-xl p-3 flex flex-col gap-2 cursor-pointer hover:shadow-md"
+                  onClick={() => setSelectedItem(item)}
+                >
+                  {"thumbnail" in item && item.thumbnail ? (
+                    <img
+                      src={item.thumbnail}
+                      alt={item.title}
+                      className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]"
+                    />
+                  ) : (
+                    <div
+                      className="w-full h-[165px] flex items-center justify-center rounded-lg text-white text-xl font-bold"
+                      style={{ backgroundColor: getColor(item.id || item.title) }}
+                    >
+                      {getInitials(item.title)}
                     </div>
-                  ))}
+                  )}
+                  <div>
+                    <strong>{item.title}</strong>
+                    {isBook(item) && (
+                      <div className="text-sm text-[#666]">
+                        {item.authors?.join(", ") || "Unknown author"}
+                      </div>
+                    )}
+                    {isVideo(item) && (
+                      <div className="text-sm text-[#666]">{item.channel || ""}</div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         )}
 
         {/* Pager */}
         <div className="flex gap-2 justify-center mt-6">
-          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1 border rounded-lg disabled:opacity-50">‹ Prev</button>
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-3 py-1 border rounded-lg disabled:opacity-50"
+          >
+            ‹ Prev
+          </button>
           <span>Page {page}</span>
-          <button onClick={() => setPage((p) => p + 1)} className="px-3 py-1 border rounded-lg">Next ›</button>
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            className="px-3 py-1 border rounded-lg"
+          >
+            Next ›
+          </button>
         </div>
       </div>
 
-      {/* Review Modal */}
-      {showReviewModal && (
-        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 text-gray-800">
-          <div className="bg-white p-6 rounded-xl w-[400px] max-w-full">
-            <h2 className="text-xl font-bold mb-3">Leave a Review</h2>
-            <textarea value={reviewContent} onChange={(e) => setReviewContent(e.target.value)}
-              rows={5} className="w-full border p-2 rounded-lg mb-3" placeholder="Write your review here..." />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setShowReviewModal(false)} className="px-3 py-1 rounded-lg border">Cancel</button>
-              <button onClick={submitReview} className="px-3 py-1 rounded-lg bg-green-600 text-white">Submit</button>
+      {/* Selected Item Modal */}
+      {selectedItem && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 text-gray-800 overflow-auto p-4">
+          <div className="bg-white p-6 rounded-xl w-full max-w-[500px] relative max-h-[90vh] overflow-y-auto">
+            {/* Close button */}
+            <button
+              onClick={() => setSelectedItem(null)}
+              className="sticky top-0 float-right text-xl font-bold bg-white"
+            >
+              ×
+            </button>
+
+            {/* Title */}
+            <h2 className="text-xl font-bold mb-2">{selectedItem.title}</h2>
+
+            {/* Description */}
+            {"synopsis" in selectedItem && selectedItem.synopsis && (
+              <p className="text-sm text-[#444] mb-3">{selectedItem.synopsis}</p>
+            )}
+            {"description" in selectedItem && selectedItem.description && (
+              <p className="text-sm text-[#444] mb-3">{selectedItem.description}</p>
+            )}
+
+            {/* Actions */}
+            <div className="flex flex-col gap-2 mb-3">
+              {user && (
+                <>
+                  <button
+                    onClick={() => toggleFavourite(selectedItem, getType(mode))}
+                    className="px-3 py-1 rounded-lg border"
+                  >
+                    {isFavourite(selectedItem.id, getType(mode))
+                      ? "★ Remove Favourite"
+                      : "☆ Add Favourite"}
+                  </button>
+                  <button
+                    onClick={handleLeaveReview}
+                    className="px-3 py-1 rounded-lg border text-green-600"
+                  >
+                    Leave Review
+                  </button>
+                  <button
+                    onClick={() => reportContent(selectedItem, getType(mode))}
+                    className="px-3 py-1 rounded-lg border text-red-600"
+                  >
+                    Report Content
+                  </button>
+                </>
+              )}
+
+              {/* External links */}
+              {isBook(selectedItem) && selectedItem.infoLink && (
+                <a
+                  href={selectedItem.infoLink}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-[#0a58ca] text-sm"
+                >
+                  View on Google Books
+                </a>
+              )}
+              {isVideo(selectedItem) && (
+                <a
+                  href={`https://www.youtube.com/watch?v=${selectedItem.id}`}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-[#0a58ca] text-sm"
+                >
+                  Watch on YouTube
+                </a>
+              )}
+            </div>
+
+            {/* Reviews */}
+            <div className="mt-3">
+              <h3 className="font-semibold mb-1">Reviews</h3>
+              {reviewsMap[selectedItem.id]?.map((r) => (
+                <div
+                  key={r.id}
+                  className="border border-[#eee] p-2 rounded-lg mb-1 text-sm"
+                >
+                  <strong>{r.userName}</strong>: {r.content}
+                  {user && (
+                    <button
+                      onClick={() => reportReview(r.id)}
+                      className="text-xs text-red-500 ml-2"
+                    >
+                      Report
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              {user && (
+                <div className="mt-2">
+                  <textarea
+                    ref={reviewRef}
+                    value={reviewContent}
+                    onChange={(e) => setReviewContent(e.target.value)}
+                    placeholder="Write a review…"
+                    className="w-full border rounded-lg p-2 text-sm"
+                  />
+                  <button
+                    onClick={submitReview}
+                    className="mt-1 px-3 py-1 bg-[#111] text-white rounded-lg"
+                  >
+                    Submit
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
+      {/* Chatbot */}
       <Chatbot />
     </main>
   );
