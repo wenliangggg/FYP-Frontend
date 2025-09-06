@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from "react";
-import { auth } from "@/lib/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth, db } from "@/lib/firebase";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react"; // npm install lucide-react
+import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,13 +14,28 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleLogin = async (e: any)=> {
+  const handleLogin = async (e: any) => {
     e.preventDefault();
     setError("");
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push("/"); // redirect after login
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Get user data from Firestore
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+      const userData = userDoc.exists() ? userDoc.data() : null;
+
+      if (!userData || userData.role === "inactive") {
+        // Logout user immediately if inactive
+        await signOut(auth);
+        setError("Your account is inactive. Please contact support.");
+        return;
+      }
+
+      // Redirect for active users
+      router.push("/");
+
     } catch (err) {
       setError("Invalid email or password.");
     }
@@ -75,15 +91,14 @@ export default function LoginPage() {
             >
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </span>
-            <p className="text-sm text-right">
-  <a
-    href="/forgot_password"
-    className="text-pink-600 font-semibold hover:underline"
-  >
-    Forgot Password?
-  </a>
-</p>
-
+            <p className="text-sm text-right mt-1">
+              <a
+                href="/forgot_password"
+                className="text-pink-600 font-semibold hover:underline"
+              >
+                Forgot Password?
+              </a>
+            </p>
           </div>
 
           <button
