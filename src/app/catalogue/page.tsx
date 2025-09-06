@@ -184,6 +184,26 @@ export default function HomePage() {
     alert("Content reported. Admin will review it.");
   }
 
+  // Get initials from title
+function getInitials(title: string) {
+  if (!title) return "?";
+  const words = title.trim().split(" ");
+  if (words.length === 1) return words[0][0].toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+// Pick a consistent background color
+const colors = ["#F59E0B", "#10B981", "#3B82F6", "#EC4899", "#8B5CF6", "#EF4444"];
+function getColor(key: string) {
+  // simple hash → same book always gets same color
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = key.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+}
+
+
   // Search / fetch
   useEffect(() => {
     search();
@@ -303,11 +323,21 @@ export default function HomePage() {
               <p>No items found.</p>
             ) : (mode === "books" ? books : videos).map((item: any) => (
               <div key={item.id} className="border border-[#eee] rounded-xl p-3 flex flex-col gap-2">
-                <img
-                  src={item.thumbnail || "/images/book-placeholder.png"}
-                  alt=""
-                  className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]"
-                />
+                {item.thumbnail ? (
+                  <img
+                    src={item.thumbnail}
+                    alt={item.title}
+                    className="w-full h-[165px] object-cover rounded-lg bg-[#fafafa]"
+                  />
+                ) : (
+                  <div
+                    className="w-full h-[165px] flex items-center justify-center rounded-lg text-white text-xl font-bold"
+                    style={{ backgroundColor: getColor(item.id || item.title) }}
+                  >
+                    {getInitials(item.title)}
+                  </div>
+                )}
+
                 <div>
                   <strong>{item.title}</strong>
                   {mode === "books" && (
