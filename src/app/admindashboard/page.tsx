@@ -23,60 +23,13 @@ import {
 import { MdSubscriptions } from "react-icons/md";
 
 // ---------------- Interfaces ----------------
-interface UserData {
-  uid: string;
-  fullName: string;
-  email: string;
-  role?: string;
-  plan?: string;
-}
-
-interface ReviewData {
-  uid: string;
-  userName: string;
-  message: string;
-  showOnHome?: boolean;
-}
-
-interface ContactData {
-  uid: string;
-  name: string;
-  email: string;
-  message: string;
-  createdAt: any;
-}
-
-interface PlanData {
-  id: string;
-  name: string;
-  price: number;
-  description: string;
-  features: string[];
-}
-
-interface PlanSummary {
-  plan: string;
-  count: number;
-}
-
-interface Review {
-  id: string;
-  userId: string;
-  userName: string;
-  content: string;
-  itemId: string;
-  type: string;
-  title: string;
-}
-
-interface Report {
-  id: string;
-  reviewId: string;
-  reportedBy: string;
-  reason?: string;
-  createdAt: any;
-  reviewData?: Review;
-}
+interface UserData { uid: string; fullName: string; email: string; role?: string; plan?: string; }
+interface ReviewData { uid: string; userName: string; message: string; showOnHome?: boolean; }
+interface ContactData { uid: string; name: string; email: string; message: string; createdAt: any; }
+interface PlanData { id: string; name: string; price: number; description: string; features: string[]; }
+interface PlanSummary { plan: string; count: number; }
+interface Review { id: string; userId: string; userName: string; content: string; itemId: string; type: string; title: string; }
+interface Report { id: string; reviewId?: string; reportedBy: string; reason?: string; createdAt: any; reviewData?: Review; title?: string; itemId?: string; type?: string; }
 
 const COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#f59e0b"];
 
@@ -88,331 +41,195 @@ export default function AdminDashboard() {
   const [plans, setPlans] = useState<PlanData[]>([]);
   const [planSummary, setPlanSummary] = useState<PlanSummary[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
+  const [reportedContent, setReportedContent] = useState<Report[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<
-    "users" | "reviews" | "contacts" | "plans" | "subscriptions" | "reports"
-  >("users");
-  const [newPlan, setNewPlan] = useState({
-    name: "",
-    price: 0,
-    description: "",
-    features: "",
-  });
+  const [activeTab, setActiveTab] = useState<"users"|"reviews"|"contacts"|"plans"|"subscriptions"|"reports"|"reportedContent">("users");
 
-  // ---------------- Fetch Data ----------------
+  const [newPlan, setNewPlan] = useState({ name: "", price: 0, description: "", features: "" });
+
+  // ---------------- Fetch Functions ----------------
   const fetchUsers = async () => {
-    const snapshot = await getDocs(collection(db, "users"));
-    const list: UserData[] = snapshot.docs.map((doc) => ({
-      ...(doc.data() as UserData),
-      uid: doc.id,
-    }));
+    const snap = await getDocs(collection(db, "users"));
+    const list: UserData[] = snap.docs.map(doc => ({ ...(doc.data() as UserData), uid: doc.id }));
     setUsers(list);
 
-    // subscription count
+    // Plan summary for subscriptions
     const counts: Record<string, number> = {};
-    list.forEach((u) => {
-      if (u.plan) counts[u.plan] = (counts[u.plan] || 0) + 1;
-    });
-    setPlanSummary(Object.entries(counts).map(([plan, count]) => ({ plan, count })));
+    list.forEach(u => { if (u.plan) counts[u.plan] = (counts[u.plan] || 0) + 1; });
+    setPlanSummary(Object.entries(counts).map(([plan,count])=>({plan,count})));
   };
 
   const fetchReviews = async () => {
-    const snapshot = await getDocs(collection(db, "reviews"));
-    setReviews(snapshot.docs.map((doc) => ({ ...(doc.data() as ReviewData), uid: doc.id })));
+    const snap = await getDocs(collection(db, "reviews"));
+    setReviews(snap.docs.map(doc => ({ ...(doc.data() as ReviewData), uid: doc.id })));
   };
 
   const fetchContacts = async () => {
-    const snapshot = await getDocs(collection(db, "contacts"));
-    setContacts(snapshot.docs.map((doc) => ({ ...(doc.data() as ContactData), uid: doc.id })));
+    const snap = await getDocs(collection(db, "contacts"));
+    setContacts(snap.docs.map(doc => ({ ...(doc.data() as ContactData), uid: doc.id })));
   };
 
   const fetchPlans = async () => {
-    const snapshot = await getDocs(collection(db, "plans"));
-    setPlans(snapshot.docs.map((doc) => ({ ...(doc.data() as PlanData), id: doc.id })));
+    const snap = await getDocs(collection(db, "plans"));
+    setPlans(snap.docs.map(doc => ({ ...(doc.data() as PlanData), id: doc.id })));
   };
 
   const fetchReports = async () => {
     const snap = await getDocs(collection(db, "reports"));
     const temp: Report[] = [];
-
     for (const d of snap.docs) {
       const data = d.data();
-      const reviewRef = doc(db, "books-video-reviews", data.reviewId);
-      const reviewSnap = await getDoc(reviewRef);
-
       let reviewData: Review | undefined;
-      if (reviewSnap.exists()) {
-        const r = reviewSnap.data();
-        reviewData = {
-          id: reviewSnap.id,
-          userId: r.userId || "",
-          userName: r.userName || "Anonymous",
-          content: r.content || "",
-          itemId: r.itemId || "",
-          type: r.type || "",
-          title: r.title || "",
-        };
+      if (data.reviewId) {
+        const rSnap = await getDoc(doc(db, "books-video-reviews", data.reviewId));
+        if (rSnap.exists()) {
+          const r = rSnap.data();
+          reviewData = { id: rSnap.id, userId: r.userId || "", userName: r.userName || "Anonymous", content: r.content || "", itemId: r.itemId || "", type: r.type || "", title: r.title || "" };
+        }
       }
-
-      temp.push({
-        id: d.id,
-        reviewId: data.reviewId,
-        reportedBy: data.reportedBy,
-        reason: data.reason,
-        createdAt: data.createdAt,
-        reviewData,
-      });
+      temp.push({ id: d.id, reviewId: data.reviewId, reportedBy: data.reportedBy, reason: data.reason, createdAt: data.createdAt, reviewData });
     }
-
     setReports(temp);
   };
 
-  // ---------------- Actions ----------------
-  const handleDeleteUser = async (uid: string) => {
-    await deleteDoc(doc(db, "users", uid));
-    setUsers((prev) => prev.filter((u) => u.uid !== uid));
+  const fetchReportedContent = async () => {
+    const snap = await getDocs(collection(db, "reports-contents"));
+    setReportedContent(
+      snap.docs.map(d => ({ id: d.id, reportedBy: d.data().reportedBy, reason: d.data().reason, createdAt: d.data().createdAt, title: d.data().title, itemId: d.data().itemId, type: d.data().type }))
+    );
   };
 
-  const handleToggleUser = async (uid: string, role?: string) => {
-    const newRole = role === "inactive" ? "user" : "inactive";
-    await updateDoc(doc(db, "users", uid), { role: newRole });
-    setUsers((prev) => prev.map((u) => (u.uid === uid ? { ...u, role: newRole } : u)));
-  };
-
-  const handleToggleShowOnHome = async (id: string, current: boolean) => {
-    await updateDoc(doc(db, "reviews", id), { showOnHome: !current });
-    fetchReviews();
-  };
-
-  const handleAddPlan = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await addDoc(collection(db, "plans"), {
-      name: newPlan.name,
-      price: newPlan.price,
-      description: newPlan.description,
-      features: newPlan.features.split(",").map((f) => f.trim()),
-    });
-    setNewPlan({ name: "", price: 0, description: "", features: "" });
-    fetchPlans();
-  };
-
-  const handleDeletePlan = async (id: string) => {
-    await deleteDoc(doc(db, "plans", id));
-    fetchPlans();
-  };
-
-  const handleDeleteReport = async (id: string) => {
-    await deleteDoc(doc(db, "reports", id));
-    setReports((prev) => prev.filter((r) => r.id !== id));
-  };
-
-  const handleDeleteReviewAndReport = async (report: Report) => {
-    await deleteDoc(doc(db, "reports", report.id));
-    if (report.reviewData) {
-      await deleteDoc(doc(db, "books-video-reviews", report.reviewId));
-    }
-    setReports((prev) => prev.filter((r) => r.id !== report.id));
-  };
-
-  const exportCSV = () => {
-    if (!planSummary.length) return;
-    const header = ["Plan", "Active Users"];
-    const rows = planSummary.map((p) => [p.plan, p.count]);
-    const csv = [header, ...rows].map((e) => e.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", "subscription_report.csv");
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  // ---------------- Action Handlers ----------------
+  const handleDeleteUser = async (uid: string) => { await deleteDoc(doc(db,"users",uid)); setUsers(prev => prev.filter(u=>u.uid!==uid)); };
+  const handleToggleUser = async (uid: string, role?: string) => { const newRole = role==="inactive"?"user":"inactive"; await updateDoc(doc(db,"users",uid),{role:newRole}); setUsers(prev=>prev.map(u=>u.uid===uid?{...u,role:newRole}:u)); };
+  const handleToggleShowOnHome = async (id:string,current:boolean) => { await updateDoc(doc(db,"reviews",id),{showOnHome:!current}); fetchReviews(); };
+  const handleAddPlan = async (e:React.FormEvent) => { e.preventDefault(); await addDoc(collection(db,"plans"),{name:newPlan.name,price:newPlan.price,description:newPlan.description,features:newPlan.features.split(",").map(f=>f.trim())}); setNewPlan({name:"",price:0,description:"",features:""}); fetchPlans(); };
+  const handleDeletePlan = async (id:string) => { await deleteDoc(doc(db,"plans",id)); fetchPlans(); };
+  const handleDeleteReport = async (id:string, collectionName:string="reports") => { await deleteDoc(doc(db,collectionName,id)); if(collectionName==="reports") setReports(prev=>prev.filter(r=>r.id!==id)); else setReportedContent(prev=>prev.filter(r=>r.id!==id)); };
+  const handleDeleteReviewAndReport = async (report:Report) => { await deleteDoc(doc(db,"reports",report.id)); if(report.reviewData) await deleteDoc(doc(db,"books-video-reviews",report.reviewId!)); setReports(prev=>prev.filter(r=>r.id!==report.id)); };
+  const exportCSV = () => { if(!planSummary.length) return; const header=["Plan","Active Users"]; const rows=planSummary.map(p=>[p.plan,p.count]); const csv=[header,...rows].map(e=>e.join(",")).join("\n"); const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const link=document.createElement("a"); link.href=url; link.setAttribute("download","subscription_report.csv"); link.click(); URL.revokeObjectURL(url); };
 
   // ---------------- Auth + Init ----------------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setCurrentUser(u);
-      if (u) {
-        const snap = await getDoc(doc(db, "users", u.uid));
-        const role = snap.exists() ? snap.data()?.role : null;
-        if (role === "admin") {
-          await Promise.all([fetchUsers(), fetchReviews(), fetchContacts(), fetchPlans(), fetchReports()]);
-        } else {
-          setError("You do not have permission to view this page.");
-        }
+      if(u){
+        const snap = await getDoc(doc(db,"users",u.uid));
+        const role = snap.exists()?snap.data()?.role:null;
+        if(role==="admin") await Promise.all([fetchUsers(),fetchReviews(),fetchContacts(),fetchPlans(),fetchReports(),fetchReportedContent()]);
+        else setError("You do not have permission to view this page.");
       }
       setLoading(false);
     });
-    return () => unsub();
-  }, []);
+    return ()=>unsub();
+  },[]);
 
-  if (loading) return <p className="p-6">Loading...</p>;
-  if (error) return <p className="p-6 text-red-600">{error}</p>;
+  if(loading) return <p className="p-6">Loading...</p>;
+  if(error) return <p className="p-6 text-red-600">{error}</p>;
 
   // ---------------- Render ----------------
   return (
     <main className="bg-white min-h-screen p-6 flex text-gray-800">
       {/* Sidebar */}
-      <aside className="w-64 mr-8 border-r border-gray-200 text-gray-800">
+      <aside className="w-64 mr-8 border-r border-gray-200">
         <ul className="space-y-2">
-          {["users","reviews","contacts","plans","subscriptions","reports"].map((tab) => (
-            <li
-              key={tab}
-              className={`cursor-pointer px-4 py-2 rounded ${
-                activeTab === tab ? "bg-pink-100 font-semibold" : "hover:bg-gray-100"
-              }`}
-              onClick={() => setActiveTab(tab as any)}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+          {["users","reviews","contacts","plans","subscriptions","reports","reportedContent"].map(tab=>(
+            <li key={tab} className={`cursor-pointer px-4 py-2 rounded ${activeTab===tab?"bg-pink-100 font-semibold":"hover:bg-gray-100"}`} onClick={()=>setActiveTab(tab as any)}>
+              {tab.charAt(0).toUpperCase()+tab.slice(1)}
             </li>
           ))}
         </ul>
       </aside>
 
       {/* Content */}
-      <section className="flex-1">
+      <section className="flex-1 overflow-auto">
         {/* Users */}
-        {activeTab === "users" && (
+        {activeTab==="users" && (
           <section>
             <h2 className="text-2xl font-bold text-pink-600 mb-6">Users</h2>
             <table className="w-full border">
               <thead>
-                <tr className="bg-gray-100">
-                  <th className="p-2">Name</th>
-                  <th className="p-2">Email</th>
-                  <th className="p-2">Role</th>
-                  <th className="p-2">Plan</th>
-                  <th className="p-2">Actions</th>
-                </tr>
+                <tr className="bg-gray-100"><th className="p-2">Name</th><th className="p-2">Email</th><th className="p-2">Role</th><th className="p-2">Plan</th><th className="p-2">Actions</th></tr>
               </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.uid} className="border-t">
-                    <td className="p-2">{u.fullName}</td>
-                    <td className="p-2">{u.email}</td>
-                    <td className="p-2">{u.role}</td>
-                    <td className="p-2">{u.plan || "—"}</td>
-                    <td className="p-2 flex gap-2">
-                      <button onClick={() => handleToggleUser(u.uid, u.role)} className="px-2 py-1 bg-blue-500 text-white rounded">
-                        {u.role === "inactive" ? "Activate" : "Deactivate"}
-                      </button>
-                      <button onClick={() => handleDeleteUser(u.uid)} className="px-2 py-1 bg-red-500 text-white rounded">
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+              <tbody>{users.map(u=>(
+                <tr key={u.uid} className="border-t">
+                  <td className="p-2">{u.fullName}</td>
+                  <td className="p-2">{u.email}</td>
+                  <td className="p-2">{u.role}</td>
+                  <td className="p-2">{u.plan||"—"}</td>
+                  <td className="p-2 flex gap-2">
+                    <button onClick={()=>handleToggleUser(u.uid,u.role)} className="px-2 py-1 bg-blue-500 text-white rounded">{u.role==="inactive"?"Activate":"Deactivate"}</button>
+                    <button onClick={()=>handleDeleteUser(u.uid)} className="px-2 py-1 bg-red-500 text-white rounded">Delete</button>
+                  </td>
+                </tr>
+              ))}</tbody>
             </table>
           </section>
         )}
 
         {/* Reviews */}
-        {activeTab === "reviews" && (
+        {activeTab==="reviews" && (
           <section>
             <h2 className="text-2xl font-bold text-pink-600 mb-6">Reviews</h2>
-            <ul className="space-y-4">
-              {reviews.map((r) => (
-                <li key={r.uid} className="p-4 border rounded">
-                  <p><strong>{r.userName}</strong>: {r.message}</p>
-                  <button
-                    onClick={() => handleToggleShowOnHome(r.uid, !!r.showOnHome)}
-                    className="mt-2 px-2 py-1 bg-green-500 text-white rounded"
-                  >
-                    {r.showOnHome ? "Hide from Home" : "Show on Home"}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <ul className="space-y-4">{reviews.map(r=>(
+              <li key={r.uid} className="p-4 border rounded">
+                <p><strong>{r.userName}</strong>: {r.message}</p>
+                <button onClick={()=>handleToggleShowOnHome(r.uid,!!r.showOnHome)} className="mt-2 px-2 py-1 bg-green-500 text-white rounded">{r.showOnHome?"Hide from Home":"Show on Home"}</button>
+              </li>
+            ))}</ul>
           </section>
         )}
 
         {/* Contacts */}
-        {activeTab === "contacts" && (
+        {activeTab==="contacts" && (
           <section>
             <h2 className="text-2xl font-bold text-pink-600 mb-6">Contacts</h2>
-            <ul className="space-y-4">
-              {contacts.map((c) => (
-                <li key={c.uid} className="p-4 border rounded">
-                  <p><strong>{c.name}</strong> ({c.email})</p>
-                  <p>{c.message}</p>
-                  <p className="text-sm text-gray-500">
-                    {c.createdAt?.toDate ? c.createdAt.toDate().toLocaleString() : ""}
-                  </p>
-                </li>
-              ))}
-            </ul>
+            <ul className="space-y-4">{contacts.map(c=>(
+              <li key={c.uid} className="p-4 border rounded">
+                <p><strong>{c.name}</strong> ({c.email})</p>
+                <p>{c.message}</p>
+                <p className="text-sm text-gray-500">{c.createdAt?.toDate?c.createdAt.toDate().toLocaleString():""}</p>
+              </li>
+            ))}</ul>
           </section>
         )}
 
         {/* Plans */}
-        {activeTab === "plans" && (
+        {activeTab==="plans" && (
           <section>
             <h2 className="text-2xl font-bold text-pink-600 mb-6">Plans</h2>
             <form onSubmit={handleAddPlan} className="space-y-2 mb-6">
-              <input value={newPlan.name} onChange={(e) => setNewPlan({ ...newPlan, name: e.target.value })} placeholder="Name" className="border p-2 w-full" />
-              <input type="number" value={newPlan.price} onChange={(e) => setNewPlan({ ...newPlan, price: Number(e.target.value) })} placeholder="Price" className="border p-2 w-full" />
-              <textarea value={newPlan.description} onChange={(e) => setNewPlan({ ...newPlan, description: e.target.value })} placeholder="Description" className="border p-2 w-full" />
-              <input value={newPlan.features} onChange={(e) => setNewPlan({ ...newPlan, features: e.target.value })} placeholder="Features (comma-separated)" className="border p-2 w-full" />
+              <input value={newPlan.name} onChange={e=>setNewPlan({...newPlan,name:e.target.value})} placeholder="Name" className="border p-2 w-full"/>
+              <input type="number" value={newPlan.price} onChange={e=>setNewPlan({...newPlan,price:Number(e.target.value)})} placeholder="Price" className="border p-2 w-full"/>
+              <textarea value={newPlan.description} onChange={e=>setNewPlan({...newPlan,description:e.target.value})} placeholder="Description" className="border p-2 w-full"/>
+              <input value={newPlan.features} onChange={e=>setNewPlan({...newPlan,features:e.target.value})} placeholder="Features (comma-separated)" className="border p-2 w-full"/>
               <button type="submit" className="px-3 py-1 bg-pink-600 text-white rounded">Add Plan</button>
             </form>
-            <ul className="space-y-4">
-              {plans.map((p) => (
-                <li key={p.id} className="p-4 border rounded flex justify-between items-center">
-                  <div>
-                    <p className="font-bold">{p.name} - ${p.price}</p>
-                    <p>{p.description}</p>
-                    <ul className="list-disc pl-5 text-sm text-gray-600">
-                      {p.features.map((f, i) => <li key={i}>{f}</li>)}
-                    </ul>
-                  </div>
-                  <button onClick={() => handleDeletePlan(p.id)} className="px-3 py-1 bg-red-500 text-white rounded">Delete</button>
-                </li>
-              ))}
-            </ul>
+            <ul className="space-y-4">{plans.map(p=>(
+              <li key={p.id} className="p-4 border rounded flex justify-between items-center">
+                <div><p className="font-bold">{p.name} - ${p.price}</p><p>{p.description}</p>
+                <ul className="list-disc pl-5 text-sm text-gray-600">{p.features.map((f,i)=><li key={i}>{f}</li>)}</ul></div>
+                <button onClick={()=>handleDeletePlan(p.id)} className="px-3 py-1 bg-red-500 text-white rounded">Delete</button>
+              </li>
+            ))}</ul>
           </section>
         )}
 
         {/* Subscriptions */}
-        {activeTab === "subscriptions" && (
+        {activeTab==="subscriptions" && (
           <section>
-            <h2 className="text-2xl font-bold text-pink-600 mb-6 flex items-center gap-2">
-              <MdSubscriptions /> Subscriptions
-            </h2>
-            {planSummary.length === 0 ? (
-              <p>No subscriptions yet.</p>
-            ) : (
+            <h2 className="text-2xl font-bold text-pink-600 mb-6 flex items-center gap-2"><MdSubscriptions/> Subscriptions</h2>
+            {planSummary.length===0?<p>No subscriptions yet.</p>:(
               <>
-                <div className="grid md:grid-cols-3 gap-6 mb-12">
-                  {planSummary.map((p, i) => (
-                    <div key={i} className="p-6 bg-white border rounded shadow text-center">
-                      <h3 className="font-bold">{p.plan}</h3>
-                      <p className="text-2xl text-pink-600">{p.count}</p>
-                    </div>
-                  ))}
-                </div>
-                <button onClick={exportCSV} className="mb-6 px-4 py-2 bg-pink-600 text-white rounded">
-                  Export CSV
-                </button>
+                <div className="grid md:grid-cols-3 gap-6 mb-12">{planSummary.map((p,i)=>(
+                  <div key={i} className="p-6 bg-white border rounded shadow text-center"><h3 className="font-bold">{p.plan}</h3><p className="text-2xl text-pink-600">{p.count}</p></div>
+                ))}</div>
+                <button onClick={exportCSV} className="mb-6 px-4 py-2 bg-pink-600 text-white rounded">Export CSV</button>
                 <div className="h-[400px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={planSummary}
-                        dataKey="count"
-                        nameKey="plan"
-                        outerRadius={120}
-                        label
-                      >
-                        {planSummary.map((_, i) => (
-                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
+                    <PieChart><Pie data={planSummary} dataKey="count" nameKey="plan" outerRadius={120} label>{planSummary.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}</Pie><Tooltip/><Legend/></PieChart>
                   </ResponsiveContainer>
                 </div>
               </>
@@ -421,48 +238,44 @@ export default function AdminDashboard() {
         )}
 
         {/* Reports */}
-        {activeTab === "reports" && (
+        {activeTab==="reports" && (
           <section>
             <h2 className="text-2xl font-bold text-pink-600 mb-6">Reported Reviews</h2>
-            {reports.length === 0 ? (
-              <p>No reports yet.</p>
-            ) : (
-              <div className="space-y-4">
-                {reports.map((r) => (
-                  <div key={r.id} className="p-4 border rounded bg-gray-50">
-                    <p><strong>Reported by:</strong> {r.reportedBy}</p>
-                    {r.reason && <p><strong>Reason:</strong> {r.reason}</p>}
-                    <p>
-                      <strong>At:</strong>{" "}
-                      {r.createdAt?.toDate
-                        ? r.createdAt.toDate().toLocaleString()
-                        : new Date(r.createdAt).toLocaleString()}
-                    </p>
-                    {r.reviewData ? (
-                      <div className="mt-2 p-2 border rounded bg-white">
-                        <p><strong>Review by:</strong> {r.reviewData.userName}</p>
-                        <p>{r.reviewData.content}</p>
-                        <p>{r.reviewData.title} ({r.reviewData.type})</p>
-                      </div>
-                    ) : (
-                      <p className="text-red-500 mt-2">Original review deleted</p>
-                    )}
-                    <div className="flex gap-2 mt-3">
-                      <button onClick={() => handleDeleteReport(r.id)} className="px-3 py-1 bg-red-500 text-white rounded">
-                        Delete Report
-                      </button>
-                      {r.reviewData && (
-                        <button onClick={() => handleDeleteReviewAndReport(r)} className="px-3 py-1 bg-red-700 text-white rounded">
-                          Delete Review & Report
-                        </button>
-                      )}
-                    </div>
+            {reports.length===0?<p>No reports yet.</p>:(
+              <div className="space-y-4">{reports.map(r=>(
+                <div key={r.id} className="p-4 border rounded bg-gray-50">
+                  <p><strong>Reported by:</strong> {r.reportedBy}</p>
+                  {r.reason && <p><strong>Reason:</strong> {r.reason}</p>}
+                  <p><strong>At:</strong> {r.createdAt?.toDate?r.createdAt.toDate().toLocaleString():new Date(r.createdAt).toLocaleString()}</p>
+                  {r.reviewData?(<div className="mt-2 p-2 border rounded bg-white"><p><strong>Review by:</strong> {r.reviewData.userName}</p><p>{r.reviewData.content}</p><p>{r.reviewData.title} ({r.reviewData.type})</p></div>):<p className="text-red-500 mt-2">Original review deleted</p>}
+                  <div className="flex gap-2 mt-3">
+                    <button onClick={()=>handleDeleteReport(r.id)} className="px-3 py-1 bg-red-500 text-white rounded">Delete Report</button>
+                    {r.reviewData && <button onClick={()=>handleDeleteReviewAndReport(r)} className="px-3 py-1 bg-red-700 text-white rounded">Delete Review & Report</button>}
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}</div>
             )}
           </section>
         )}
+
+        {/* Reported Content */}
+        {activeTab==="reportedContent" && (
+          <section>
+            <h2 className="text-2xl font-bold text-pink-600 mb-6">Reported Content</h2>
+            {reportedContent.length===0?<p>No reported content.</p>:(
+              <div className="space-y-4">{reportedContent.map(r=>(
+                <div key={r.id} className="p-4 border rounded bg-gray-50">
+                  <p><strong>Reported by:</strong> {r.reportedBy}</p>
+                  {r.reason && <p><strong>Reason:</strong> {r.reason}</p>}
+                  <p><strong>At:</strong> {r.createdAt?.toDate?r.createdAt.toDate().toLocaleString():new Date(r.createdAt).toLocaleString()}</p>
+                  <p><strong>Item:</strong> {r.title} ({r.type})</p>
+                  <button onClick={()=>handleDeleteReport(r.id,"reports-contents")} className="mt-2 px-3 py-1 bg-red-500 text-white rounded">Delete Report</button>
+                </div>
+              ))}</div>
+            )}
+          </section>
+        )}
+
       </section>
     </main>
   );
