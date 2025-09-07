@@ -38,7 +38,8 @@ interface ProcessedBook {
   canonicalVolumeLink: string | null;
   infoLink: string | null;
   bestLink: string | null;
-  snippet: string | null;
+  snippet: string | null
+  synopsis: string | null;
   buckets?: string[];
 }
 
@@ -262,6 +263,7 @@ export async function GET(request: NextRequest) {
             infoLink: info.infoLink || null,
             bestLink,
             snippet: v.searchInfo?.textSnippet || null,
+            synopsis: info.description || v.searchInfo?.textSnippet || null,
             buckets
           };
 

@@ -1,7 +1,12 @@
+// app/components/DiscoverPage.tsx
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import Chatbot from "../components/Chatbot";
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, MoreHorizontal } from 'lucide-react';
+import { auth, db } from '@/lib/firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { collection, doc, setDoc, deleteDoc, getDocs, addDoc, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 
 // Types
 interface Book {
@@ -15,7 +20,7 @@ interface Book {
   canonicalVolumeLink?: string;
   infoLink?: string;
   bestLink?: string;
-  snippet?: string;
+  synopsis?: string;
   buckets?: string[];
 }
 
@@ -45,6 +50,13 @@ interface VideosResponse {
   hasMore: boolean;
 }
 
+interface Review {
+  id: string;
+  userId: string;
+  userName: string;
+  content: string;
+}
+
 const FALLBACK_THUMB = '/images/book-placeholder.png';
 
 const bucketDisplayNames = {
@@ -57,7 +69,7 @@ const bucketDisplayNames = {
   poetry_humor: 'Poetry & Humor',
   biography: 'Biography',
   juvenile_other: 'Other (Kids)',
-  young_adult: 'Young Adult'
+  young_adult: 'Young Adult',
 };
 
 export default function DiscoverPage() {
@@ -65,20 +77,33 @@ export default function DiscoverPage() {
   const [mode, setMode] = useState<'books' | 'videos'>('books');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  
+
   // Books state
   const [books, setBooks] = useState<Book[]>([]);
   const [bucket, setBucket] = useState('');
   const [booksPage, setBooksPage] = useState(1);
   const [booksHasMore, setBooksHasMore] = useState(false);
   const [totalApprox, setTotalApprox] = useState<number | null>(null);
-  
+
   // Videos state
   const [videos, setVideos] = useState<Video[]>([]);
   const [videosPage, setVideosPage] = useState(1);
   const [videosHasMore, setVideosHasMore] = useState(false);
 
   const pageSize = 20;
+
+  // Auth, Favourites, Reviews, Modal
+  const [user, setUser] = useState<User | null>(null);
+  const [favourites, setFavourites] = useState<any[]>([]);
+  const [reviewsMap, setReviewsMap] = useState<Record<string, Review[]>>({});
+  const [selectedItem, setSelectedItem] = useState<Book | Video | null>(null);
+  const [reviewContent, setReviewContent] = useState('');
+  const reviewRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Type guards & helpers
+  const isBook = (item: Book | Video): item is Book => (item as any).id !== undefined;
+  const isVideo = (item: Book | Video): item is Video => (item as any).videoId !== undefined;
+  const getItemId = (item: Book | Video) => (isBook(item) ? item.id : item.videoId);
 
   // Helper functions
   const bestBookUrl = (book: Book): string | null => {
@@ -92,6 +117,13 @@ export default function DiscoverPage() {
 
   const humanizeBucket = (slug: string): string => {
     return bucketDisplayNames[slug as keyof typeof bucketDisplayNames] || slug.replace(/_/g, ' ');
+  };
+
+  const handleLeaveReview = () => {
+    setTimeout(() => {
+      reviewRef.current?.scrollIntoView({ behavior: 'smooth' });
+      reviewRef.current?.focus();
+    }, 100);
   };
 
   // API calls
@@ -140,6 +172,105 @@ export default function DiscoverPage() {
     }
   };
 
+  // Favourites & Reviews & Reports
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      if (u) loadFavourites(u.uid);
+      else setFavourites([]);
+    });
+    return () => unsub();
+  }, []);
+
+  async function loadFavourites(uid: string) {
+    const snap = await getDocs(collection(db, 'users', uid, 'favourites'));
+    const favs: any[] = [];
+    snap.forEach((doc) => favs.push(doc.data()));
+    setFavourites(favs);
+  }
+
+  function isFavourite(id: string, type: 'book' | 'video') {
+    return favourites.some((f) => f.id === id && f.type === type);
+  }
+
+  async function toggleFavourite(item: Book | Video, type: 'book' | 'video') {
+    if (!user) return alert('Please log in to favourite items.');
+    const key = getItemId(item);
+    const exists = favourites.find((f) => f.id === key && f.type === type);
+    const ref = doc(db, 'users', user.uid, 'favourites', key);
+
+    if (exists) {
+      await deleteDoc(ref);
+      setFavourites(favourites.filter((f) => !(f.id === key && f.type === type)));
+    } else {
+      const newFav: any = { id: key, type, title: (item as any).title || '' };
+      if ((item as any).thumbnail) newFav.thumbnail = (item as any).thumbnail;
+      if (isBook(item) && item.authors) newFav.authors = item.authors;
+      if (isVideo(item) && item.channel) newFav.channel = item.channel;
+      if (isBook(item) && item.infoLink) newFav.infoLink = item.infoLink;
+
+      await setDoc(ref, newFav);
+      setFavourites([...favourites, newFav]);
+    }
+  }
+
+  async function submitReview() {
+    if (!user || !selectedItem) return;
+    const key = getItemId(selectedItem);
+    await addDoc(collection(db, 'books-video-reviews'), {
+      userId: user.uid,
+      userName: user.displayName || 'Anonymous',
+      itemId: key,
+      type: mode === 'books' ? 'book' : 'video',
+      title: (selectedItem as any).title,
+      content: reviewContent,
+      createdAt: Timestamp.now(),
+    });
+    setReviewContent('');
+    await loadReviewsForItem(key);
+  }
+
+  async function loadReviewsForItem(itemId: string) {
+    const qRef = query(
+      collection(db, 'books-video-reviews'),
+      where('itemId', '==', itemId),
+      orderBy('createdAt', 'desc'),
+      limit(3)
+    );
+    const snap = await getDocs(qRef);
+    const revs: Review[] = [];
+    snap.forEach((doc) => revs.push({ id: doc.id, ...(doc.data() as any) } as Review));
+    setReviewsMap((prev) => ({ ...prev, [itemId]: revs }));
+  }
+
+  async function reportReview(reviewId: string) {
+    if (!user) return;
+    const reason = prompt('Optional: reason for reporting this review');
+    if (reason === null) return;
+    await addDoc(collection(db, 'reports'), {
+      reviewId,
+      reportedBy: user.uid,
+      reason,
+      createdAt: Timestamp.now(),
+    });
+    alert('Review reported. Admin will check it.');
+  }
+
+  async function reportContent(item: Book | Video, type: 'book' | 'video') {
+    if (!user) return alert('Please log in to report content.');
+    const reason = prompt('Why are you reporting this content? (optional)');
+    if (reason === null) return;
+    await addDoc(collection(db, 'reports-contents'), {
+      itemId: getItemId(item),
+      type,
+      title: (item as any).title,
+      reportedBy: user.uid,
+      reason,
+      createdAt: Timestamp.now(),
+    });
+    alert('Content reported. Admin will review it.');
+  }
+
   // Effects
   useEffect(() => {
     if (mode === 'books') {
@@ -153,6 +284,13 @@ export default function DiscoverPage() {
   useEffect(() => {
     searchBooks();
   }, []);
+
+  // Load reviews when a modal opens
+  useEffect(() => {
+    if (selectedItem) {
+      loadReviewsForItem(getItemId(selectedItem));
+    }
+  }, [selectedItem]);
 
   // Event handlers
   const handleSearch = () => {
@@ -179,7 +317,7 @@ export default function DiscoverPage() {
     setBooksPage(1);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       handleSearch();
     }
@@ -194,17 +332,15 @@ export default function DiscoverPage() {
     const start = totalPages
       ? Math.max(1, Math.min(booksPage - half, totalPages - windowSize + 1))
       : Math.max(1, booksPage - half);
-    const end = totalPages
-      ? Math.min(totalPages, start + windowSize - 1)
-      : booksPage + half;
+    const end = totalPages ? Math.min(totalPages, start + windowSize - 1) : booksPage + half;
 
-    const pages = [];
+    const pages = [] as number[];
     for (let i = start; i <= end; i++) {
       pages.push(i);
     }
 
     return (
-      <div className="flex items-center justify-center gap-2 mt-6 flex-wrap bg-white">
+      <div className="flex items-center justify-center gap-2 mt-6 flex-wrap">
         <button
           onClick={() => setBooksPage(1)}
           disabled={booksPage === 1}
@@ -219,7 +355,7 @@ export default function DiscoverPage() {
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
-        
+
         {start > 1 && (
           <button
             onClick={() => setBooksPage(Math.max(1, booksPage - windowSize))}
@@ -235,9 +371,7 @@ export default function DiscoverPage() {
             key={pageNum}
             onClick={() => setBooksPage(pageNum)}
             className={`px-3 py-2 border rounded-lg ${
-              pageNum === booksPage
-                ? 'bg-black text-white border-black'
-                : 'hover:bg-gray-50'
+              pageNum === booksPage ? 'bg-black text-white border-black' : 'hover:bg-gray-50'
             }`}
           >
             {pageNum}
@@ -277,7 +411,7 @@ export default function DiscoverPage() {
     const start = videosPage;
     const end = videosPage + windowSize - 1;
 
-    const pages = [];
+    const pages = [] as number[];
     for (let i = start; i <= end; i++) {
       pages.push(i);
     }
@@ -304,9 +438,7 @@ export default function DiscoverPage() {
             key={pageNum}
             onClick={() => setVideosPage(pageNum)}
             className={`px-3 py-2 border rounded-lg ${
-              pageNum === videosPage
-                ? 'bg-black text-white border-black'
-                : 'hover:bg-gray-50'
+              pageNum === videosPage ? 'bg-black text-white border-black' : 'hover:bg-gray-50'
             }`}
           >
             {pageNum}
@@ -335,183 +467,269 @@ export default function DiscoverPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6 font-sans text-gray-900">
-      <h1 className="text-2xl font-bold mb-3">Discover Books & Videos for Kids</h1>
+    <main className="bg-white">
+      <div className="max-w-6xl mx-auto p-6 font-sans text-gray-900">
+        <h1 className="text-2xl font-bold mb-3">Discover Books & Videos for Kids</h1>
 
-      {/* Search Bar */}
-      <div className="flex gap-2 mb-3">
-        <div className="relative flex-1">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Search titles/topics (optional) e.g. dinosaurs, space…"
-            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-        <button
-          onClick={handleSearch}
-          disabled={loading}
-          className="px-4 py-2.5 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          <Search className="w-4 h-4" />
-          Search
-        </button>
-      </div>
-
-      {/* Mode Tabs */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => handleModeChange('books')}
-          className={`px-4 py-2 rounded-lg ${
-            mode === 'books'
-              ? 'bg-black text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          Books
-        </button>
-        <button
-          onClick={() => handleModeChange('videos')}
-          className={`px-4 py-2 rounded-lg ${
-            mode === 'videos'
-              ? 'bg-black text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          Videos
-        </button>
-      </div>
-
-      {/* Category Shelves - Only for Books */}
-      {mode === 'books' && (
-        <div className="flex flex-wrap gap-2 mb-6">
+        {/* Search Bar */}
+        <div className="flex gap-2 mb-3">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Search titles/topics (optional) e.g. dinosaurs, space…"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
           <button
-            onClick={() => handleBucketChange('')}
-            className={`px-3 py-1.5 rounded-full text-sm border ${
-              bucket === ''
-                ? 'bg-black text-white border-black'
-                : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
+            onClick={handleSearch}
+            disabled={loading}
+            className="px-4 py-2.5 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <Search className="w-4 h-4" />
+            Search
+          </button>
+        </div>
+
+        {/* Mode Tabs */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => handleModeChange('books')}
+            className={`px-4 py-2 rounded-lg ${
+              mode === 'books' ? 'bg-black text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            All
+            Books
           </button>
-          {Object.entries(bucketDisplayNames).map(([key, label]) => (
+          <button
+            onClick={() => handleModeChange('videos')}
+            className={`px-4 py-2 rounded-lg ${
+              mode === 'videos' ? 'bg-black text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Videos
+          </button>
+        </div>
+
+        {/* Category Shelves - Only for Books */}
+        {mode === 'books' && (
+          <div className="flex flex-wrap gap-2 mb-6">
             <button
-              key={key}
-              onClick={() => handleBucketChange(key)}
+              onClick={() => handleBucketChange('')}
               className={`px-3 py-1.5 rounded-full text-sm border ${
-                bucket === key
-                  ? 'bg-black text-white border-black'
-                  : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
+                bucket === '' ? 'bg-black text-white border-black' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
               }`}
             >
-              {label}
+              All
             </button>
-          ))}
-        </div>
-      )}
+            {Object.entries(bucketDisplayNames).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => handleBucketChange(key)}
+                className={`px-3 py-1.5 rounded-full text-sm border ${
+                  bucket === key ? 'bg-black text-white border-black' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
-      {/* Loading State */}
-      {loading && (
-        <div className="text-center py-8 text-gray-600">
-          Loading...
-        </div>
-      )}
+        {/* Loading State */}
+        {loading && <div className="text-center py-8 text-gray-600">Loading...</div>}
 
-      {/* Results Grid */}
-      {!loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
-          {mode === 'books'
-            ? books.map((book) => (
-                <div key={book.id} className="border border-gray-200 rounded-xl p-3 flex flex-col gap-2">
-                  <img
-                    src={book.thumbnail || FALLBACK_THUMB}
-                    alt={book.title}
-                    className="w-full h-40 object-cover rounded-lg bg-gray-100"
-                  />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-sm line-clamp-2">{book.title}</h3>
-                    <p className="text-xs text-gray-600 mt-1">
-                      {book.authors.length > 0 ? book.authors.join(', ') : 'Unknown author'}
-                    </p>
-                    {book.buckets && book.buckets.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {book.buckets.map((bucketItem) => (
-                          <span
-                            key={bucketItem}
-                            className="text-xs bg-gray-100 border border-gray-300 rounded-full px-2 py-0.5"
-                          >
-                            {humanizeBucket(bucketItem)}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {bestBookUrl(book) && (
-                    <a
-                      href={bestBookUrl(book)!}
-                      target="_blank"
-                      rel="noopener"
-                      className="text-blue-600 hover:text-blue-800 text-sm"
-                    >
-                      View on Google Books
-                    </a>
-                  )}
-                </div>
-              ))
-            : videos.map((video, index) => (
-                <div key={`${video.videoId}-${index}`} className="border border-gray-200 rounded-xl p-3 flex flex-col gap-2">
-                  {video.thumbnail && (
+        {/* Results Grid */}
+        {!loading && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
+            {mode === 'books'
+              ? books.map((book) => (
+                  <div
+                    key={book.id}
+                    className="border border-gray-200 rounded-xl p-3 flex flex-col gap-2 cursor-pointer hover:shadow-md"
+                    onClick={() => setSelectedItem(book)}
+                  >
                     <img
-                      src={video.thumbnail}
-                      alt={video.title}
+                      src={book.thumbnail || FALLBACK_THUMB}
+                      alt={book.title}
                       className="w-full h-40 object-cover rounded-lg bg-gray-100"
                     />
-                  )}
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-sm line-clamp-2">{video.title}</h3>
-                    {video.channel && (
-                      <p className="text-xs text-gray-600 mt-1">{video.channel}</p>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-sm line-clamp-2">{book.title}</h3>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {book.authors.length > 0 ? book.authors.join(', ') : 'Unknown author'}
+                      </p>
+                      {book.buckets && book.buckets.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {book.buckets.map((bucketItem) => (
+                            <span
+                              key={bucketItem}
+                              className="text-xs bg-gray-100 border border-gray-300 rounded-full px-2 py-0.5"
+                            >
+                              {humanizeBucket(bucketItem)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                ))
+              : videos.map((video, index) => (
+                  <div
+                    key={`${video.videoId}-${index}`}
+                    className="border border-gray-200 rounded-xl p-3 flex flex-col gap-2 cursor-pointer hover:shadow-md"
+                    onClick={() => setSelectedItem(video)}
+                  >
+                    {video.thumbnail && (
+                      <img
+                        src={video.thumbnail}
+                        alt={video.title}
+                        className="w-full h-40 object-cover rounded-lg bg-gray-100"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-sm line-clamp-2">{video.title}</h3>
+                      {video.channel && <p className="text-xs text-gray-600 mt-1">{video.channel}</p>}
+                    </div>
+                    {video.url && (
+                      <a
+                        href={video.url}
+                        target="_blank"
+                        rel="noopener"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-blue-600 hover:text-blue-800 text-sm"
+                      >
+                        Watch on YouTube
+                      </a>
                     )}
                   </div>
-                  {video.url && (
-                    <a
-                      href={video.url}
-                      target="_blank"
-                      rel="noopener"
-                      className="text-blue-600 hover:text-blue-800 text-sm"
-                    >
-                      Watch on YouTube
-                    </a>
+                ))}
+          </div>
+        )}
+
+        {/* No Results */}
+        {!loading && mode === 'books' && books.length === 0 && (
+          <div className="text-center py-8 text-gray-600">No books found.</div>
+        )}
+
+        {!loading && mode === 'videos' && videos.length === 0 && (
+          <div className="text-center py-8 text-gray-600">No videos found.</div>
+        )}
+
+        {/* Pagination */}
+        {!loading && (
+          <>
+            {mode === 'books' && books.length > 0 && <BooksPagination />}
+            {mode === 'videos' && videos.length > 0 && <VideosPagination />}
+          </>
+        )}
+      </div>
+
+      {/* Selected Item Modal */}
+      {selectedItem && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 text-gray-800 overflow-auto p-4">
+          <div className="bg-white p-6 rounded-xl w-full max-w-[500px] relative max-h-[90vh] overflow-y-auto">
+            {/* Close button */}
+            <button onClick={() => setSelectedItem(null)} className="sticky top-0 float-right text-xl font-bold bg-white">
+              ×
+            </button>
+
+            {/* Title */}
+            <h2 className="text-xl font-bold mb-2">{(selectedItem as any).title}</h2>
+
+            {/* Description/Details */}
+            {isBook(selectedItem) && selectedItem.synopsis && (
+              <p className="text-sm text-[#444] mb-3">{selectedItem.synopsis}</p>
+            )}
+            {isVideo(selectedItem) && (
+              <p className="text-sm text-[#444] mb-3">{selectedItem.channel}</p>
+            )}
+
+
+            {/* Actions */}
+            <div className="flex flex-col gap-2 mb-3">
+              {user && (
+                <>
+                  <button
+                    onClick={() => toggleFavourite(selectedItem, mode === 'books' ? 'book' : 'video')}
+                    className="px-3 py-1 rounded-lg border"
+                  >
+                    {isFavourite(getItemId(selectedItem), mode === 'books' ? 'book' : 'video')
+                      ? '★ Remove Favourite'
+                      : '☆ Add Favourite'}
+                  </button>
+                  <button onClick={handleLeaveReview} className="px-3 py-1 rounded-lg border text-green-600">
+                    Leave Review
+                  </button>
+                  <button
+                    onClick={() => reportContent(selectedItem, mode === 'books' ? 'book' : 'video')}
+                    className="px-3 py-1 rounded-lg border text-red-600"
+                  >
+                    Report Content
+                  </button>
+                </>
+              )}
+
+              {/* External links */}
+              {isBook(selectedItem) && bestBookUrl(selectedItem) && (
+                <a
+                  href={bestBookUrl(selectedItem)!}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-blue-600 hover:text-blue-800 text-sm"
+                >
+                  View on Google Books
+                </a>
+              )}
+              {isVideo(selectedItem) && (
+                <a
+                  href={selectedItem.url || `https://www.youtube.com/watch?v=${selectedItem.videoId}`}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-blue-600 hover:text-blue-800 text-sm"
+                >
+                  Watch on YouTube
+                </a>
+              )}
+            </div>
+
+            {/* Reviews */}
+            <div className="mt-3">
+              <h3 className="font-semibold mb-1">Reviews</h3>
+              {reviewsMap[getItemId(selectedItem)]?.map((r) => (
+                <div key={r.id} className="border border-[#eee] p-2 rounded-lg mb-1 text-sm">
+                  <strong>{r.userName}</strong>: {r.content}
+                  {user && (
+                    <button onClick={() => reportReview(r.id)} className="text-xs text-red-500 ml-2">
+                      Report
+                    </button>
                   )}
                 </div>
-              ))
-          }
+              ))}
+
+              {user && (
+                <div className="mt-2">
+                  <textarea
+                    ref={reviewRef}
+                    value={reviewContent}
+                    onChange={(e) => setReviewContent(e.target.value)}
+                    placeholder="Write a review…"
+                    className="w-full border rounded-lg p-2 text-sm"
+                  />
+                  <button onClick={submitReview} className="mt-1 px-3 py-1 bg-[#111] text-white rounded-lg">
+                    Submit
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
-
-      {/* No Results */}
-      {!loading && mode === 'books' && books.length === 0 && (
-        <div className="text-center py-8 text-gray-600">
-          No books found.
-        </div>
-      )}
-
-      {!loading && mode === 'videos' && videos.length === 0 && (
-        <div className="text-center py-8 text-gray-600">
-          No videos found.
-        </div>
-      )}
-
-      {/* Pagination */}
-      {!loading && (
-        <>
-          {mode === 'books' && books.length > 0 && <BooksPagination />}
-          {mode === 'videos' && videos.length > 0 && <VideosPagination />}
-        </>
-      )}
-    </div>
+            {/* Chatbot */}
+            <Chatbot />
+    </main>
   );
 }
