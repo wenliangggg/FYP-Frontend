@@ -28,9 +28,9 @@ export default function PaymentClient() {
 
   // QR mapping
   const planQR: Record<string, string> = {
-    "Starter Plan": "/qr/starter.png",
-    "Mid-Tier Plan": "/qr/mid.png",
-    "Premium Plan": "/qr/premium.png",
+    "Starter Plan": "/qr/starter.jpg",
+    "Mid-Tier Plan": "/qr/mid.jpg",
+    "Premium Plan": "/qr/premium.jpg",
     "Free Plan": "/qr/free.png",
     "Unknown Plan": "/qr/free.png",
   };
