@@ -121,6 +121,14 @@ export default function Navbar() {
                       )}
                       {(role === "admin" || role === "user") && (
                         <Link
+                          href="/favourites"
+                          className="block px-4 py-2 text-gray-700 hover:bg-gray-100"
+                        >
+                          My Favourites
+                        </Link>
+                      )}
+                      {(role === "admin" || role === "user") && (
+                        <Link
                           href="/plans"
                           className="block px-4 py-2 text-gray-700 hover:bg-gray-100"
                         >

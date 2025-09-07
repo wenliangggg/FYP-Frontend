@@ -1,6 +1,7 @@
 // app/components/DiscoverPage.tsx
 'use client';
 
+import { getDoc } from "firebase/firestore";
 import Chatbot from "../components/Chatbot";
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, MoreHorizontal } from 'lucide-react';
@@ -77,6 +78,7 @@ export default function DiscoverPage() {
   const [mode, setMode] = useState<'books' | 'videos'>('books');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [role, setRole] = useState<string>("");
 
   // Books state
   const [books, setBooks] = useState<Book[]>([]);
@@ -171,6 +173,31 @@ export default function DiscoverPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+  const unsub = onAuthStateChanged(auth, async (u) => {
+    setUser(u);
+    if (u) {
+      try {
+        const snap = await getDoc(doc(db, "users", u.uid));
+        if (snap.exists()) {
+          const data = snap.data();
+          setRole(data.role || "");  // 👈 set role here
+        } else {
+          setRole("");
+        }
+        loadFavourites(u.uid);
+      } catch (err) {
+        console.error("Failed to load user role:", err);
+        setRole("");
+      }
+    } else {
+      setRole("");
+      setFavourites([]);
+    }
+  });
+  return () => unsub();
+}, []);
 
   // Favourites & Reviews & Reports
   useEffect(() => {
@@ -728,8 +755,15 @@ export default function DiscoverPage() {
           </div>
         </div>
       )}
-            {/* Chatbot */}
-            <Chatbot />
+{["admin", "user"].includes(role?.toLowerCase()) && (
+  <>
+    {/* Chatbot */}
+    <Chatbot />
+  </>
+)}
+
+    
+
     </main>
   );
 }
