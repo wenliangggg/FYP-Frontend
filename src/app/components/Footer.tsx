@@ -1,0 +1,13 @@
+'use client';
+
+export default function Footer() {
+  return (
+    <footer className="bg-pink-600 text-white text-center py-6 mt-10">
+      <p>© 2025 KidFlix. All rights reserved.</p>
+      <div className="mt-2 space-x-4">
+        <a href="#" className="hover:underline">Privacy Policy</a>
+        <a href="#" className="hover:underline">Terms of Service</a>
+      </div>
+    </footer>
+  );
+}
