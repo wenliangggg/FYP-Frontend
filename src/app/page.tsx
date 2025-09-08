@@ -1,6 +1,5 @@
 'use client';
 
-import Footer from "./components/Footer";
 import { where } from "firebase/firestore";
 import { FaBook, FaVideo, FaRobot } from "react-icons/fa";
 import { MdSecurity } from "react-icons/md";
@@ -198,9 +197,6 @@ export default function LandingPage() {
           </div>
         )}
       </section>
-
-      {/* Footer */}
-      <Footer />
     </main>
   );
 }

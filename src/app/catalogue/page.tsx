@@ -758,7 +758,7 @@ export default function DiscoverPage() {
 {["admin", "user"].includes(role?.toLowerCase()) && (
   <>
     {/* Chatbot */}
-    <Chatbot />
+    {/* <Chatbot /> */}
   </>
 )}
 
