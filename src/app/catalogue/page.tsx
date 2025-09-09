@@ -621,17 +621,6 @@ export default function DiscoverPage() {
                       <h3 className="font-semibold text-sm line-clamp-2">{video.title}</h3>
                       {video.channel && <p className="text-xs text-gray-600 mt-1">{video.channel}</p>}
                     </div>
-                    {video.url && (
-                      <a
-                        href={video.url}
-                        target="_blank"
-                        rel="noopener"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-blue-600 hover:text-blue-800 text-sm"
-                      >
-                        Watch on YouTube
-                      </a>
-                    )}
                   </div>
                 ))}
           </div>
@@ -701,16 +690,23 @@ export default function DiscoverPage() {
               )}
 
               {/* External links */}
-              {isBook(selectedItem) && bestBookUrl(selectedItem) && (
+            {["admin", "user"].includes(role?.toLowerCase()) && (
+              <>
+            {isBook(selectedItem) && bestBookUrl(selectedItem) && (
                 <a
                   href={bestBookUrl(selectedItem)!}
                   target="_blank"
                   rel="noopener"
                   className="text-blue-600 hover:text-blue-800 text-sm"
-                >
+                  >
                   View on Google Books
                 </a>
-              )}
+                )}
+              </>
+            )}
+
+            {["admin", "user"].includes(role?.toLowerCase()) && (
+              <>
               {isVideo(selectedItem) && (
                 <a
                   href={selectedItem.url || `https://www.youtube.com/watch?v=${selectedItem.videoId}`}
@@ -721,6 +717,10 @@ export default function DiscoverPage() {
                   Watch on YouTube
                 </a>
               )}
+              </>
+            )}
+              
+
             </div>
 
             {/* Reviews */}
