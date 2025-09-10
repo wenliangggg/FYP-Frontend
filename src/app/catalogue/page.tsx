@@ -3,6 +3,7 @@
 
 import { getDoc } from "firebase/firestore";
 import Chatbot from "../components/Chatbot";
+import Link from "next/link";
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, MoreHorizontal } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
@@ -261,21 +262,18 @@ export default function DiscoverPage() {
     await loadReviewsForItem(key);
   }
 
-async function loadReviewsForItem(itemId: string) {
-  const qRef = query(
-    collection(db, 'books-video-reviews'),
-    where('itemId', '==', itemId),
-    orderBy('createdAt', 'desc'),
-    limit(3)
-  );
-  const snap = await getDocs(qRef);
-  const revs: Review[] = [];
-  snap.forEach((doc) => revs.push({ id: doc.id, ...(doc.data() as any) } as Review));
-
-  console.log("Loaded reviews for", itemId, revs); // 👈 Add this
-  setReviewsMap((prev) => ({ ...prev, [itemId]: revs }));
-}
-
+  async function loadReviewsForItem(itemId: string) {
+    const qRef = query(
+      collection(db, 'books-video-reviews'),
+      where('itemId', '==', itemId),
+      orderBy('createdAt', 'desc'),
+      limit(3)
+    );
+    const snap = await getDocs(qRef);
+    const revs: Review[] = [];
+    snap.forEach((doc) => revs.push({ id: doc.id, ...(doc.data() as any) } as Review));
+    setReviewsMap((prev) => ({ ...prev, [itemId]: revs }));
+  }
 
   async function reportReview(reviewId: string) {
     if (!user) return;
@@ -773,7 +771,7 @@ async function loadReviewsForItem(itemId: string) {
     </div>
   ) : (
     <p className="text-xs text-gray-500 mt-2">
-      Log in to leave a review.
+      <Link href="/login" className="text-gray-700 hover:text-pink-500">Login</Link> to leave a review.
     </p>
   )}
 </div>
