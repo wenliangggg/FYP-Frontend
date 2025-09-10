@@ -56,6 +56,10 @@ interface Review {
   userId: string;
   userName: string;
   content: string;
+  itemId: string;
+  type: 'book' | 'video';
+  title: string;
+  createdAt: Timestamp;
 }
 
 const FALLBACK_THUMB = '/images/book-placeholder.png';
@@ -257,18 +261,21 @@ export default function DiscoverPage() {
     await loadReviewsForItem(key);
   }
 
-  async function loadReviewsForItem(itemId: string) {
-    const qRef = query(
-      collection(db, 'books-video-reviews'),
-      where('itemId', '==', itemId),
-      orderBy('createdAt', 'desc'),
-      limit(3)
-    );
-    const snap = await getDocs(qRef);
-    const revs: Review[] = [];
-    snap.forEach((doc) => revs.push({ id: doc.id, ...(doc.data() as any) } as Review));
-    setReviewsMap((prev) => ({ ...prev, [itemId]: revs }));
-  }
+async function loadReviewsForItem(itemId: string) {
+  const qRef = query(
+    collection(db, 'books-video-reviews'),
+    where('itemId', '==', itemId),
+    orderBy('createdAt', 'desc'),
+    limit(3)
+  );
+  const snap = await getDocs(qRef);
+  const revs: Review[] = [];
+  snap.forEach((doc) => revs.push({ id: doc.id, ...(doc.data() as any) } as Review));
+
+  console.log("Loaded reviews for", itemId, revs); // 👈 Add this
+  setReviewsMap((prev) => ({ ...prev, [itemId]: revs }));
+}
+
 
   async function reportReview(reviewId: string) {
     if (!user) return;
@@ -724,34 +731,53 @@ export default function DiscoverPage() {
             </div>
 
             {/* Reviews */}
-            <div className="mt-3">
-              <h3 className="font-semibold mb-1">Reviews</h3>
-              {reviewsMap[getItemId(selectedItem)]?.map((r) => (
-                <div key={r.id} className="border border-[#eee] p-2 rounded-lg mb-1 text-sm">
-                  <strong>{r.userName}</strong>: {r.content}
-                  {user && (
-                    <button onClick={() => reportReview(r.id)} className="text-xs text-red-500 ml-2">
-                      Report
-                    </button>
-                  )}
-                </div>
-              ))}
+            {/* Reviews */}
+<div className="mt-3">
+  <h3 className="font-semibold mb-1">Reviews</h3>
 
-              {user && (
-                <div className="mt-2">
-                  <textarea
-                    ref={reviewRef}
-                    value={reviewContent}
-                    onChange={(e) => setReviewContent(e.target.value)}
-                    placeholder="Write a review…"
-                    className="w-full border rounded-lg p-2 text-sm"
-                  />
-                  <button onClick={submitReview} className="mt-1 px-3 py-1 bg-[#111] text-white rounded-lg">
-                    Submit
-                  </button>
-                </div>
-              )}
-            </div>
+  {/* Always show reviews */}
+  {reviewsMap[getItemId(selectedItem)]?.length ? (
+    reviewsMap[getItemId(selectedItem)].map((r) => (
+      <div key={r.id} className="border border-[#eee] p-2 rounded-lg mb-1 text-sm">
+        <strong>{r.userName}</strong>: {r.content}
+        {user && (
+          <button
+            onClick={() => reportReview(r.id)}
+            className="text-xs text-red-500 ml-2"
+          >
+            Report
+          </button>
+        )}
+      </div>
+    ))
+  ) : (
+    <p className="text-sm text-gray-500">No reviews yet.</p>
+  )}
+
+  {/* Only logged-in users can leave a review */}
+  {user ? (
+    <div className="mt-2">
+      <textarea
+        ref={reviewRef}
+        value={reviewContent}
+        onChange={(e) => setReviewContent(e.target.value)}
+        placeholder="Write a review…"
+        className="w-full border rounded-lg p-2 text-sm"
+      />
+      <button
+        onClick={submitReview}
+        className="mt-1 px-3 py-1 bg-[#111] text-white rounded-lg"
+      >
+        Submit
+      </button>
+    </div>
+  ) : (
+    <p className="text-xs text-gray-500 mt-2">
+      Log in to leave a review.
+    </p>
+  )}
+</div>
+
           </div>
         </div>
       )}
