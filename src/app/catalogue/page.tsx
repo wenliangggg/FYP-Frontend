@@ -3,6 +3,7 @@
 
 import { getDoc } from "firebase/firestore";
 import Chatbot from "../components/Chatbot";
+import DialogflowMessenger from "../components/DialogflowMessenger";
 import Link from "next/link";
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, MoreHorizontal } from 'lucide-react';
@@ -783,6 +784,7 @@ export default function DiscoverPage() {
   <>
     {/* Chatbot */}
     {/* <Chatbot /> */}
+    <DialogflowMessenger />
   </>
 )}
 
