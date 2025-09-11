@@ -1,65 +1,69 @@
-// app/components/DiscoverPage.tsx
 'use client';
 
-import Chatbot from "../components/Chatbot";
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, MoreHorizontal } from 'lucide-react';
-import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, doc, setDoc, deleteDoc, getDocs, addDoc, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 
 // Types
 interface Book {
   id: string;
   title: string;
-  authors: string[];
-  categories: string[];
-  maturityRating: string;
+  authors?: string[];
   thumbnail?: string;
+  buckets?: string[];
   previewLink?: string;
   canonicalVolumeLink?: string;
   infoLink?: string;
-  bestLink?: string;
-  synopsis?: string;
-  buckets?: string[];
 }
 
 interface Video {
+  id: string;
   title: string;
-  channel: string;
-  channelId: string;
-  videoId: string;
+  channel?: string;
   thumbnail?: string;
-  publishedAt: string;
   url?: string;
-  categoryHint: number;
 }
 
-interface BooksResponse {
+interface BookResponse {
   items: Book[];
-  page: number;
-  pageSize: number;
   hasMore: boolean;
   totalApprox?: number;
 }
 
-interface VideosResponse {
+interface VideoResponse {
   items: Video[];
-  page: number;
-  pageSize: number;
   hasMore: boolean;
 }
 
-interface Review {
-  id: string;
-  userId: string;
-  userName: string;
-  content: string;
+interface ChatResponse {
+  reply?: string;
+  action?: 'search_books' | 'search_videos';
+  params?: {
+    q?: string;
+    bucket?: string;
+    page?: number;
+  };
 }
 
-const FALLBACK_THUMB = '/images/book-placeholder.png';
+type Mode = 'books' | 'videos';
 
-const bucketDisplayNames = {
+const FALLBACK_THUMB = '/images/book-placeholder.png';
+const API_BASE = ""; // Empty for same origin
+
+const SHELVES = [
+  { bucket: '', label: 'All' },
+  { bucket: 'juvenile_fiction', label: 'Fiction' },
+  { bucket: 'juvenile_nonfiction', label: 'Nonfiction' },
+  { bucket: 'education', label: 'Education' },
+  { bucket: 'literature', label: 'Literature' },
+  { bucket: 'early_readers', label: 'Picture/Board/Early' },
+  { bucket: 'middle_grade', label: 'Middle Grade' },
+  { bucket: 'poetry_humor', label: 'Poetry & Humor' },
+  { bucket: 'biography', label: 'Biography' },
+  { bucket: 'juvenile_other', label: 'Other (Kids)' },
+  { bucket: 'young_adult', label: 'Young Adult' },
+];
+
+const BUCKET_LABELS: Record<string, string> = {
   juvenile_fiction: 'Fiction',
   juvenile_nonfiction: 'Nonfiction',
   education: 'Education',
@@ -69,43 +73,30 @@ const bucketDisplayNames = {
   poetry_humor: 'Poetry & Humor',
   biography: 'Biography',
   juvenile_other: 'Other (Kids)',
-  young_adult: 'Young Adult',
+  young_adult: 'Young Adult'
 };
 
-export default function DiscoverPage() {
+export default function KidsDiscovery() {
   // State
-  const [mode, setMode] = useState<'books' | 'videos'>('books');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [mode, setMode] = useState<Mode>('books');
+  const [query, setQuery] = useState('');
+  const [bucket, setBucket] = useState('');
   const [loading, setLoading] = useState(false);
 
   // Books state
   const [books, setBooks] = useState<Book[]>([]);
-  const [bucket, setBucket] = useState('');
-  const [booksPage, setBooksPage] = useState(1);
-  const [booksHasMore, setBooksHasMore] = useState(false);
-  const [totalApprox, setTotalApprox] = useState<number | null>(null);
+  const [bookPage, setBookPage] = useState(1);
+  const [bookHasMore, setBookHasMore] = useState(false);
+  const [bookTotalApprox, setBookTotalApprox] = useState<number | null>(null);
 
   // Videos state
   const [videos, setVideos] = useState<Video[]>([]);
-  const [videosPage, setVideosPage] = useState(1);
-  const [videosHasMore, setVideosHasMore] = useState(false);
+  const [videoPage, setVideoPage] = useState(1);
+  const [videoHasMore, setVideoHasMore] = useState(false);
 
-  const pageSize = 20;
+  const PAGE_SIZE = 20;
 
-  // Auth, Favourites, Reviews, Modal
-  const [user, setUser] = useState<User | null>(null);
-  const [favourites, setFavourites] = useState<any[]>([]);
-  const [reviewsMap, setReviewsMap] = useState<Record<string, Review[]>>({});
-  const [selectedItem, setSelectedItem] = useState<Book | Video | null>(null);
-  const [reviewContent, setReviewContent] = useState('');
-  const reviewRef = useRef<HTMLTextAreaElement | null>(null);
-
-  // Type guards & helpers
-  const isBook = (item: Book | Video): item is Book => (item as any).id !== undefined;
-  const isVideo = (item: Book | Video): item is Video => (item as any).videoId !== undefined;
-  const getItemId = (item: Book | Video) => (isBook(item) ? item.id : item.videoId);
-
-  // Helper functions
+  // Utility functions
   const bestBookUrl = (book: Book): string | null => {
     return (
       book.previewLink ||
@@ -116,620 +107,427 @@ export default function DiscoverPage() {
   };
 
   const humanizeBucket = (slug: string): string => {
-    return bucketDisplayNames[slug as keyof typeof bucketDisplayNames] || slug.replace(/_/g, ' ');
-  };
-
-  const handleLeaveReview = () => {
-    setTimeout(() => {
-      reviewRef.current?.scrollIntoView({ behavior: 'smooth' });
-      reviewRef.current?.focus();
-    }, 100);
+    return BUCKET_LABELS[slug] || slug.replace(/_/g, ' ');
   };
 
   // API calls
-  const searchBooks = async () => {
+  const searchBooks = useCallback(async (page: number = 1) => {
+    const params = new URLSearchParams();
+    if (query) params.set('q', query);
+    if (bucket) params.set('bucket', bucket);
+    params.set('lang', 'en');
+    params.set('page', String(page));
+    params.set('pageSize', String(PAGE_SIZE));
+
+    const response = await fetch(`${API_BASE}/api/books?${params.toString()}`);
+    return response.json() as Promise<BookResponse>;
+  }, [query, bucket]);
+
+  const searchVideos = useCallback(async (page: number = 1) => {
+    const params = new URLSearchParams();
+    params.set('q', query || 'stories for kids');
+    params.set('page', String(page));
+    params.set('pageSize', String(PAGE_SIZE));
+
+    const response = await fetch(`${API_BASE}/api/videos?${params.toString()}`);
+    return response.json() as Promise<VideoResponse>;
+  }, [query]);
+
+  const callChat = async (message: string): Promise<ChatResponse> => {
+    const response = await fetch(`${API_BASE}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, lang: 'en' })
+    });
+    if (!response.ok) throw new Error('chat failed');
+    return response.json();
+  };
+
+  // Main search function
+  const performSearch = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (searchQuery.trim()) params.set('q', searchQuery.trim());
-      if (bucket) params.set('bucket', bucket);
-      params.set('lang', 'en');
-      params.set('page', String(booksPage));
-      params.set('pageSize', String(pageSize));
-
-      const response = await fetch(`/api/books?${params.toString()}`);
-      const data: BooksResponse = await response.json();
-
-      setBooks(data.items || []);
-      setBooksHasMore(!!data.hasMore);
-      setTotalApprox(typeof data.totalApprox === 'number' ? data.totalApprox : null);
+      if (mode === 'books') {
+        const data = await searchBooks(bookPage);
+        setBooks(data.items || []);
+        setBookHasMore(!!data.hasMore);
+        setBookTotalApprox(typeof data.totalApprox === 'number' ? data.totalApprox : null);
+        
+        // Prefetch next page
+        if (data.hasMore) {
+          searchBooks(bookPage + 1).catch(() => {});
+        }
+      } else {
+        const data = await searchVideos(videoPage);
+        setVideos(data.items || []);
+        setVideoHasMore(!!data.hasMore);
+        
+        // Prefetch next page
+        if (data.hasMore) {
+          searchVideos(videoPage + 1).catch(() => {});
+        }
+      }
     } catch (error) {
-      console.error('Books search failed:', error);
-      setBooks([]);
+      console.error('Search failed:', error);
     } finally {
       setLoading(false);
     }
   };
-
-  const searchVideos = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      params.set('q', searchQuery.trim() || 'stories for kids');
-      params.set('page', String(videosPage));
-      params.set('pageSize', String(pageSize));
-
-      const response = await fetch(`/api/videos?${params.toString()}`);
-      const data: VideosResponse = await response.json();
-
-      setVideos(data.items || []);
-      setVideosHasMore(!!data.hasMore);
-    } catch (error) {
-      console.error('Videos search failed:', error);
-      setVideos([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Favourites & Reviews & Reports
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      if (u) loadFavourites(u.uid);
-      else setFavourites([]);
-    });
-    return () => unsub();
-  }, []);
-
-  async function loadFavourites(uid: string) {
-    const snap = await getDocs(collection(db, 'users', uid, 'favourites'));
-    const favs: any[] = [];
-    snap.forEach((doc) => favs.push(doc.data()));
-    setFavourites(favs);
-  }
-
-  function isFavourite(id: string, type: 'book' | 'video') {
-    return favourites.some((f) => f.id === id && f.type === type);
-  }
-
-  async function toggleFavourite(item: Book | Video, type: 'book' | 'video') {
-    if (!user) return alert('Please log in to favourite items.');
-    const key = getItemId(item);
-    const exists = favourites.find((f) => f.id === key && f.type === type);
-    const ref = doc(db, 'users', user.uid, 'favourites', key);
-
-    if (exists) {
-      await deleteDoc(ref);
-      setFavourites(favourites.filter((f) => !(f.id === key && f.type === type)));
-    } else {
-      const newFav: any = { id: key, type, title: (item as any).title || '' };
-      if ((item as any).thumbnail) newFav.thumbnail = (item as any).thumbnail;
-      if (isBook(item) && item.authors) newFav.authors = item.authors;
-      if (isVideo(item) && item.channel) newFav.channel = item.channel;
-      if (isBook(item) && item.infoLink) newFav.infoLink = item.infoLink;
-
-      await setDoc(ref, newFav);
-      setFavourites([...favourites, newFav]);
-    }
-  }
-
-  async function submitReview() {
-    if (!user || !selectedItem) return;
-    const key = getItemId(selectedItem);
-    await addDoc(collection(db, 'books-video-reviews'), {
-      userId: user.uid,
-      userName: user.displayName || 'Anonymous',
-      itemId: key,
-      type: mode === 'books' ? 'book' : 'video',
-      title: (selectedItem as any).title,
-      content: reviewContent,
-      createdAt: Timestamp.now(),
-    });
-    setReviewContent('');
-    await loadReviewsForItem(key);
-  }
-
-  async function loadReviewsForItem(itemId: string) {
-    const qRef = query(
-      collection(db, 'books-video-reviews'),
-      where('itemId', '==', itemId),
-      orderBy('createdAt', 'desc'),
-      limit(3)
-    );
-    const snap = await getDocs(qRef);
-    const revs: Review[] = [];
-    snap.forEach((doc) => revs.push({ id: doc.id, ...(doc.data() as any) } as Review));
-    setReviewsMap((prev) => ({ ...prev, [itemId]: revs }));
-  }
-
-  async function reportReview(reviewId: string) {
-    if (!user) return;
-    const reason = prompt('Optional: reason for reporting this review');
-    if (reason === null) return;
-    await addDoc(collection(db, 'reports'), {
-      reviewId,
-      reportedBy: user.uid,
-      reason,
-      createdAt: Timestamp.now(),
-    });
-    alert('Review reported. Admin will check it.');
-  }
-
-  async function reportContent(item: Book | Video, type: 'book' | 'video') {
-    if (!user) return alert('Please log in to report content.');
-    const reason = prompt('Why are you reporting this content? (optional)');
-    if (reason === null) return;
-    await addDoc(collection(db, 'reports-contents'), {
-      itemId: getItemId(item),
-      type,
-      title: (item as any).title,
-      reportedBy: user.uid,
-      reason,
-      createdAt: Timestamp.now(),
-    });
-    alert('Content reported. Admin will review it.');
-  }
 
   // Effects
   useEffect(() => {
-    if (mode === 'books') {
-      searchBooks();
-    } else {
-      searchVideos();
-    }
-  }, [mode, booksPage, videosPage, bucket]);
-
-  // Initial search
-  useEffect(() => {
-    searchBooks();
-  }, []);
-
-  // Load reviews when a modal opens
-  useEffect(() => {
-    if (selectedItem) {
-      loadReviewsForItem(getItemId(selectedItem));
-    }
-  }, [selectedItem]);
+    performSearch();
+  }, [mode, bookPage, videoPage, bucket]);
 
   // Event handlers
-  const handleSearch = () => {
-    setBooksPage(1);
-    setVideosPage(1);
-    if (mode === 'books') {
-      searchBooks();
-    } else {
-      searchVideos();
-    }
-  };
-
-  const handleModeChange = (newMode: 'books' | 'videos') => {
+  const handleModeChange = (newMode: Mode) => {
     setMode(newMode);
     if (newMode === 'books') {
-      setBooksPage(1);
+      setBookPage(1);
     } else {
-      setVideosPage(1);
+      setVideoPage(1);
     }
   };
 
   const handleBucketChange = (newBucket: string) => {
     setBucket(newBucket);
-    setBooksPage(1);
+    setBookPage(1);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleSearch = () => {
+    setBookPage(1);
+    setVideoPage(1);
+    performSearch();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleSearch();
     }
   };
 
-  // Pagination components
-  const BooksPagination = () => {
-    const totalPages = totalApprox ? Math.max(1, Math.ceil(totalApprox / pageSize)) : null;
+  // Pagination helpers
+  const PaginationButton = ({ 
+    onClick, 
+    disabled, 
+    children 
+  }: { 
+    onClick: () => void; 
+    disabled?: boolean; 
+    children: React.ReactNode;
+  }) => (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-900 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      {children}
+    </button>
+  );
+
+  const PageLink = ({ 
+    page, 
+    current, 
+    onClick 
+  }: { 
+    page: number; 
+    current: number; 
+    onClick: (page: number) => void;
+  }) => (
+    <button
+      onClick={() => onClick(page)}
+      className={`px-3 py-2 rounded-lg border ${
+        page === current
+          ? 'bg-black text-white border-black'
+          : 'border-gray-200 bg-white text-gray-900 hover:bg-gray-50'
+      }`}
+    >
+      {page}
+    </button>
+  );
+
+  // Render pagination
+  const renderBooksPagination = () => {
+    const totalPages = bookTotalApprox ? Math.max(1, Math.ceil(bookTotalApprox / PAGE_SIZE)) : null;
     const windowSize = 9;
     const half = Math.floor(windowSize / 2);
 
-    const start = totalPages
-      ? Math.max(1, Math.min(booksPage - half, totalPages - windowSize + 1))
-      : Math.max(1, booksPage - half);
-    const end = totalPages ? Math.min(totalPages, start + windowSize - 1) : booksPage + half;
+    let start = totalPages
+      ? Math.max(1, Math.min(bookPage - half, totalPages - windowSize + 1))
+      : Math.max(1, bookPage - half);
+    let end = totalPages
+      ? Math.min(totalPages, start + windowSize - 1)
+      : bookPage + half;
 
-    const pages = [] as number[];
+    const pages = [];
     for (let i = start; i <= end; i++) {
-      pages.push(i);
+      pages.push(
+        <PageLink
+          key={i}
+          page={i}
+          current={bookPage}
+          onClick={(page) => setBookPage(page)}
+        />
+      );
     }
 
     return (
-      <div className="flex items-center justify-center gap-2 mt-6 flex-wrap">
-        <button
-          onClick={() => setBooksPage(1)}
-          disabled={booksPage === 1}
-          className="px-3 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+      <div className="flex items-center justify-center gap-2 my-4 flex-wrap">
+        <PaginationButton
+          onClick={() => setBookPage(1)}
+          disabled={bookPage === 1}
         >
           <ChevronsLeft className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => setBooksPage(Math.max(1, booksPage - 1))}
-          disabled={booksPage === 1}
-          className="px-3 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+        </PaginationButton>
+        <PaginationButton
+          onClick={() => setBookPage(Math.max(1, bookPage - 1))}
+          disabled={bookPage === 1}
         >
           <ChevronLeft className="w-4 h-4" />
-        </button>
-
+        </PaginationButton>
+        
         {start > 1 && (
           <button
-            onClick={() => setBooksPage(Math.max(1, booksPage - windowSize))}
-            className="px-3 py-2 border rounded-lg hover:bg-gray-50"
+            onClick={() => setBookPage(Math.max(1, bookPage - windowSize))}
+            className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-900 hover:bg-gray-50"
             title="Jump back"
           >
             <MoreHorizontal className="w-4 h-4" />
           </button>
         )}
-
-        {pages.map((pageNum) => (
+        
+        {pages}
+        
+        {(totalPages ? end < totalPages : bookHasMore) && (
           <button
-            key={pageNum}
-            onClick={() => setBooksPage(pageNum)}
-            className={`px-3 py-2 border rounded-lg ${
-              pageNum === booksPage ? 'bg-black text-white border-black' : 'hover:bg-gray-50'
-            }`}
-          >
-            {pageNum}
-          </button>
-        ))}
-
-        {(totalPages ? end < totalPages : booksHasMore) && (
-          <button
-            onClick={() => setBooksPage(booksPage + windowSize)}
-            className="px-3 py-2 border rounded-lg hover:bg-gray-50"
+            onClick={() => setBookPage(bookPage + windowSize)}
+            className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-900 hover:bg-gray-50"
             title="Jump ahead"
           >
             <MoreHorizontal className="w-4 h-4" />
           </button>
         )}
-
-        <button
-          onClick={() => setBooksPage(booksPage + 1)}
-          disabled={totalPages ? booksPage >= totalPages : !booksHasMore}
-          className="px-3 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+        
+        <PaginationButton
+          onClick={() => setBookPage(bookPage + 1)}
+          disabled={totalPages ? bookPage >= totalPages : !bookHasMore}
         >
           <ChevronRight className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => totalPages && setBooksPage(totalPages)}
-          disabled={!totalPages || booksPage === totalPages}
-          className="px-3 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+        </PaginationButton>
+        <PaginationButton
+          onClick={() => totalPages && setBookPage(totalPages)}
+          disabled={!totalPages || bookPage === totalPages}
         >
           <ChevronsRight className="w-4 h-4" />
-        </button>
+        </PaginationButton>
       </div>
     );
   };
 
-  const VideosPagination = () => {
-    const windowSize = 9;
-    const start = videosPage;
-    const end = videosPage + windowSize - 1;
-
-    const pages = [] as number[];
-    for (let i = start; i <= end; i++) {
-      pages.push(i);
-    }
-
+  const renderVideosPagination = () => {
     return (
-      <div className="flex items-center justify-center gap-2 mt-6 flex-wrap">
-        <button
-          onClick={() => setVideosPage(1)}
-          disabled={videosPage === 1}
-          className="px-3 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+      <div className="flex items-center justify-center gap-2 my-4 flex-wrap">
+        <PaginationButton
+          onClick={() => setVideoPage(1)}
+          disabled={videoPage === 1}
         >
           <ChevronsLeft className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => setVideosPage(Math.max(1, videosPage - 1))}
-          disabled={videosPage === 1}
-          className="px-3 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+        </PaginationButton>
+        <PaginationButton
+          onClick={() => setVideoPage(Math.max(1, videoPage - 1))}
+          disabled={videoPage === 1}
         >
           <ChevronLeft className="w-4 h-4" />
-        </button>
-
-        {pages.map((pageNum) => (
-          <button
-            key={pageNum}
-            onClick={() => setVideosPage(pageNum)}
-            className={`px-3 py-2 border rounded-lg ${
-              pageNum === videosPage ? 'bg-black text-white border-black' : 'hover:bg-gray-50'
-            }`}
-          >
-            {pageNum}
-          </button>
+        </PaginationButton>
+        
+        {Array.from({ length: 9 }, (_, i) => videoPage + i).map(page => (
+          <PageLink
+            key={page}
+            page={page}
+            current={videoPage}
+            onClick={(page) => setVideoPage(page)}
+          />
         ))}
-
-        {videosHasMore && (
+        
+        {videoHasMore && (
           <button
-            onClick={() => setVideosPage(videosPage + windowSize)}
-            className="px-3 py-2 border rounded-lg hover:bg-gray-50"
+            onClick={() => setVideoPage(videoPage + 9)}
+            className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-900 hover:bg-gray-50"
             title="Jump ahead"
           >
             <MoreHorizontal className="w-4 h-4" />
           </button>
         )}
-
-        <button
-          onClick={() => setVideosPage(videosPage + 1)}
-          disabled={!videosHasMore}
-          className="px-3 py-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+        
+        <PaginationButton
+          onClick={() => videoHasMore && setVideoPage(videoPage + 1)}
+          disabled={!videoHasMore}
         >
           <ChevronRight className="w-4 h-4" />
-        </button>
+        </PaginationButton>
       </div>
     );
   };
 
   return (
-    <main className="bg-white">
-      <div className="max-w-6xl mx-auto p-6 font-sans text-gray-900">
-        <h1 className="text-2xl font-bold mb-3">Discover Books & Videos for Kids</h1>
-
-        {/* Search Bar */}
-        <div className="flex gap-2 mb-3">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Search titles/topics (optional) e.g. dinosaurs, space…"
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          <button
-            onClick={handleSearch}
-            disabled={loading}
-            className="px-4 py-2.5 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <Search className="w-4 h-4" />
-            Search
-          </button>
+    <div className="max-w-6xl mx-auto p-6 font-sans text-gray-900">
+      <h1 className="text-3xl font-bold mb-3">Discover Books & Videos for Kids</h1>
+      
+      {/* Search Bar */}
+      <div className="flex gap-2 mb-3">
+        <div className="relative flex-1">
+          <input
+            type="text"
+            placeholder="Search titles/topics (optional) e.g. dinosaurs, space…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <Search className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
         </div>
-
-        {/* Mode Tabs */}
-        <div className="flex gap-2 mb-4">
-          <button
-            onClick={() => handleModeChange('books')}
-            className={`px-4 py-2 rounded-lg ${
-              mode === 'books' ? 'bg-black text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            Books
-          </button>
-          <button
-            onClick={() => handleModeChange('videos')}
-            className={`px-4 py-2 rounded-lg ${
-              mode === 'videos' ? 'bg-black text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            Videos
-          </button>
-        </div>
-
-        {/* Category Shelves - Only for Books */}
-        {mode === 'books' && (
-          <div className="flex flex-wrap gap-2 mb-6">
-            <button
-              onClick={() => handleBucketChange('')}
-              className={`px-3 py-1.5 rounded-full text-sm border ${
-                bucket === '' ? 'bg-black text-white border-black' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
-              }`}
-            >
-              All
-            </button>
-            {Object.entries(bucketDisplayNames).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => handleBucketChange(key)}
-                className={`px-3 py-1.5 rounded-full text-sm border ${
-                  bucket === key ? 'bg-black text-white border-black' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Loading State */}
-        {loading && <div className="text-center py-8 text-gray-600">Loading...</div>}
-
-        {/* Results Grid */}
-        {!loading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
-            {mode === 'books'
-              ? books.map((book) => (
-                  <div
-                    key={book.id}
-                    className="border border-gray-200 rounded-xl p-3 flex flex-col gap-2 cursor-pointer hover:shadow-md"
-                    onClick={() => setSelectedItem(book)}
-                  >
-                    <img
-                      src={book.thumbnail || FALLBACK_THUMB}
-                      alt={book.title}
-                      className="w-full h-40 object-cover rounded-lg bg-gray-100"
-                    />
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-sm line-clamp-2">{book.title}</h3>
-                      <p className="text-xs text-gray-600 mt-1">
-                        {book.authors.length > 0 ? book.authors.join(', ') : 'Unknown author'}
-                      </p>
-                      {book.buckets && book.buckets.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {book.buckets.map((bucketItem) => (
-                            <span
-                              key={bucketItem}
-                              className="text-xs bg-gray-100 border border-gray-300 rounded-full px-2 py-0.5"
-                            >
-                              {humanizeBucket(bucketItem)}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                  </div>
-                ))
-              : videos.map((video, index) => (
-                  <div
-                    key={`${video.videoId}-${index}`}
-                    className="border border-gray-200 rounded-xl p-3 flex flex-col gap-2 cursor-pointer hover:shadow-md"
-                    onClick={() => setSelectedItem(video)}
-                  >
-                    {video.thumbnail && (
-                      <img
-                        src={video.thumbnail}
-                        alt={video.title}
-                        className="w-full h-40 object-cover rounded-lg bg-gray-100"
-                      />
-                    )}
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-sm line-clamp-2">{video.title}</h3>
-                      {video.channel && <p className="text-xs text-gray-600 mt-1">{video.channel}</p>}
-                    </div>
-                    {video.url && (
-                      <a
-                        href={video.url}
-                        target="_blank"
-                        rel="noopener"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-blue-600 hover:text-blue-800 text-sm"
-                      >
-                        Watch on YouTube
-                      </a>
-                    )}
-                  </div>
-                ))}
-          </div>
-        )}
-
-        {/* No Results */}
-        {!loading && mode === 'books' && books.length === 0 && (
-          <div className="text-center py-8 text-gray-600">No books found.</div>
-        )}
-
-        {!loading && mode === 'videos' && videos.length === 0 && (
-          <div className="text-center py-8 text-gray-600">No videos found.</div>
-        )}
-
-        {/* Pagination */}
-        {!loading && (
-          <>
-            {mode === 'books' && books.length > 0 && <BooksPagination />}
-            {mode === 'videos' && videos.length > 0 && <VideosPagination />}
-          </>
-        )}
+        <button
+          onClick={handleSearch}
+          className="px-4 py-2.5 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+        >
+          Search
+        </button>
       </div>
 
-      {/* Selected Item Modal */}
-      {selectedItem && (
-        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 text-gray-800 overflow-auto p-4">
-          <div className="bg-white p-6 rounded-xl w-full max-w-[500px] relative max-h-[90vh] overflow-y-auto">
-            {/* Close button */}
-            <button onClick={() => setSelectedItem(null)} className="sticky top-0 float-right text-xl font-bold bg-white">
-              ×
+      {/* Mode Tabs */}
+      <div className="flex gap-2 my-4">
+        <button
+          onClick={() => handleModeChange('books')}
+          className={`px-4 py-2 rounded-lg transition-colors ${
+            mode === 'books'
+              ? 'bg-black text-white'
+              : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+          }`}
+        >
+          Books
+        </button>
+        <button
+          onClick={() => handleModeChange('videos')}
+          className={`px-4 py-2 rounded-lg transition-colors ${
+            mode === 'videos'
+              ? 'bg-black text-white'
+              : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+          }`}
+        >
+          Videos
+        </button>
+      </div>
+
+      {/* Book Shelves */}
+      {mode === 'books' && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {SHELVES.map((shelf) => (
+            <button
+              key={shelf.bucket}
+              onClick={() => handleBucketChange(shelf.bucket)}
+              className={`px-3 py-2 rounded-full text-sm transition-colors ${
+                bucket === shelf.bucket
+                  ? 'bg-black text-white'
+                  : 'bg-gray-100 text-gray-900 border border-gray-200 hover:bg-gray-200'
+              }`}
+            >
+              {shelf.label}
             </button>
+          ))}
+        </div>
+      )}
 
-            {/* Title */}
-            <h2 className="text-xl font-bold mb-2">{(selectedItem as any).title}</h2>
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-8 text-gray-600">Loading…</div>
+      )}
 
-            {/* Description/Details */}
-            {isBook(selectedItem) && selectedItem.synopsis && (
-              <p className="text-sm text-[#444] mb-3">{selectedItem.synopsis}</p>
-            )}
-            {isVideo(selectedItem) && (
-              <p className="text-sm text-[#444] mb-3">{selectedItem.channel}</p>
-            )}
-
-
-            {/* Actions */}
-            <div className="flex flex-col gap-2 mb-3">
-              {user && (
-                <>
-                  <button
-                    onClick={() => toggleFavourite(selectedItem, mode === 'books' ? 'book' : 'video')}
-                    className="px-3 py-1 rounded-lg border"
-                  >
-                    {isFavourite(getItemId(selectedItem), mode === 'books' ? 'book' : 'video')
-                      ? '★ Remove Favourite'
-                      : '☆ Add Favourite'}
-                  </button>
-                  <button onClick={handleLeaveReview} className="px-3 py-1 rounded-lg border text-green-600">
-                    Leave Review
-                  </button>
-                  <button
-                    onClick={() => reportContent(selectedItem, mode === 'books' ? 'book' : 'video')}
-                    className="px-3 py-1 rounded-lg border text-red-600"
-                  >
-                    Report Content
-                  </button>
-                </>
-              )}
-
-              {/* External links */}
-              {isBook(selectedItem) && bestBookUrl(selectedItem) && (
-                <a
-                  href={bestBookUrl(selectedItem)!}
-                  target="_blank"
-                  rel="noopener"
-                  className="text-blue-600 hover:text-blue-800 text-sm"
-                >
-                  View on Google Books
-                </a>
-              )}
-              {isVideo(selectedItem) && (
-                <a
-                  href={selectedItem.url || `https://www.youtube.com/watch?v=${selectedItem.videoId}`}
-                  target="_blank"
-                  rel="noopener"
-                  className="text-blue-600 hover:text-blue-800 text-sm"
-                >
-                  Watch on YouTube
-                </a>
-              )}
-            </div>
-
-            {/* Reviews */}
-            <div className="mt-3">
-              <h3 className="font-semibold mb-1">Reviews</h3>
-              {reviewsMap[getItemId(selectedItem)]?.map((r) => (
-                <div key={r.id} className="border border-[#eee] p-2 rounded-lg mb-1 text-sm">
-                  <strong>{r.userName}</strong>: {r.content}
-                  {user && (
-                    <button onClick={() => reportReview(r.id)} className="text-xs text-red-500 ml-2">
-                      Report
-                    </button>
+      {/* Results Grid */}
+      {!loading && (
+        <>
+          {mode === 'books' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {books.map((book) => (
+                <div key={book.id} className="border border-gray-200 rounded-2xl p-3 flex flex-col gap-2">
+                  <img
+                    src={book.thumbnail || FALLBACK_THUMB}
+                    alt=""
+                    className="w-full h-40 object-cover rounded-lg bg-gray-50"
+                  />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-sm mb-1">{book.title}</h3>
+                    <p className="text-xs text-gray-600 mb-2">
+                      {(book.authors || []).join(', ') || 'Unknown author'}
+                    </p>
+                    {book.buckets && book.buckets.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {book.buckets.map((bucketName) => (
+                          <span
+                            key={bucketName}
+                            className="text-xs bg-gray-100 border border-gray-200 rounded-full px-2 py-1"
+                          >
+                            {humanizeBucket(bucketName)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {bestBookUrl(book) && (
+                    <a
+                      href={bestBookUrl(book)!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 text-sm hover:underline"
+                    >
+                      View on Google Books
+                    </a>
                   )}
                 </div>
               ))}
-
-              {user && (
-                <div className="mt-2">
-                  <textarea
-                    ref={reviewRef}
-                    value={reviewContent}
-                    onChange={(e) => setReviewContent(e.target.value)}
-                    placeholder="Write a review…"
-                    className="w-full border rounded-lg p-2 text-sm"
-                  />
-                  <button onClick={submitReview} className="mt-1 px-3 py-1 bg-[#111] text-white rounded-lg">
-                    Submit
-                  </button>
-                </div>
-              )}
             </div>
-          </div>
-        </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {videos.map((video) => (
+                <div key={video.id} className="border border-gray-200 rounded-2xl p-3 flex flex-col gap-2">
+                  {video.thumbnail && (
+                    <img
+                      src={video.thumbnail}
+                      alt=""
+                      className="w-full h-40 object-cover rounded-lg"
+                    />
+                  )}
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-sm mb-1">{video.title}</h3>
+                    {video.channel && (
+                      <p className="text-xs text-gray-600">{video.channel}</p>
+                    )}
+                  </div>
+                  {video.url && (
+                    <a
+                      href={video.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 text-sm hover:underline"
+                    >
+                      Watch on YouTube
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* No Results */}
+          {((mode === 'books' && books.length === 0) || (mode === 'videos' && videos.length === 0)) && (
+            <div className="text-center py-8 text-gray-600">
+              {mode === 'books' ? 'No books found.' : 'No videos found.'}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {mode === 'books' ? renderBooksPagination() : renderVideosPagination()}
+        </>
       )}
-            {/* Chatbot */}
-            <Chatbot />
-    </main>
+    </div>
   );
 }

@@ -28,3 +28,19 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Dialogflow Messenger custom styles */
+df-messenger {
+  --df-messenger-button-titlebar-color: #0b5fff;
+  --df-messenger-button-titlebar-font-color: #ffffff;
+  --df-messenger-titlebar-font-color: #ffffff;
+  --df-messenger-chat-background-color: #ffffff;
+  --df-messenger-user-message: #dbeafe;
+  --df-messenger-bot-message: #f5f5f5;
+  --df-messenger-font-color: #0f172a;
+  --df-messenger-input-box-color: #ffffff;
+  --df-messenger-input-font-color: #0f172a;
+  --df-messenger-input-placeholder-font-color: #8a8a8a;
+  --df-messenger-send-icon: #0b5fff;
+  z-index: 9999;
+}
