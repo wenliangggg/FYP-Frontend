@@ -46,6 +46,10 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"users"|"reviews"|"contacts"|"plans"|"subscriptions"|"reports"|"reportedContent">("users");
+  const [editingUser, setEditingUser] = useState<UserData | null>(null);
+  const [editForm, setEditForm] = useState({ fullName: "", email: "", role: "", plan: "" });
+  const [editingPlan, setEditingPlan] = useState<PlanData | null>(null);
+  const [editPlanForm, setEditPlanForm] = useState({ name: "", price: 0, description: "", features: "" });
 
   const [newPlan, setNewPlan] = useState({ name: "", price: 0, description: "", features: "" });
 
@@ -102,8 +106,27 @@ export default function AdminDashboard() {
   };
 
   // ---------------- Action Handlers ----------------
-  const handleDeleteUser = async (uid: string) => { await deleteDoc(doc(db,"users",uid)); setUsers(prev => prev.filter(u=>u.uid!==uid)); };
-  const handleToggleUser = async (uid: string, role?: string) => { const newRole = role==="inactive"?"user":"inactive"; await updateDoc(doc(db,"users",uid),{role:newRole}); setUsers(prev=>prev.map(u=>u.uid===uid?{...u,role:newRole}:u)); };
+  const handleDeleteUser = async (uid: string) => {
+  if (!confirm("Are you sure you want to delete this user? This action cannot be undone.")) {
+    return;
+  }
+
+  await deleteDoc(doc(db, "users", uid));
+  setUsers(prev => prev.filter(u => u.uid !== uid));
+};
+const handleToggleUser = async (uid: string, role?: string) => {
+  const newRole = role === "inactive" ? "user" : "inactive";
+
+  if (!confirm(`Are you sure you want to ${newRole === "inactive" ? "deactivate" : "activate"} this account?`)) {
+    return;
+  }
+
+  await updateDoc(doc(db, "users", uid), { role: newRole });
+  setUsers(prev =>
+    prev.map(u => (u.uid === uid ? { ...u, role: newRole } : u))
+  );
+};
+
   const handleToggleShowOnHome = async (id:string,current:boolean) => { await updateDoc(doc(db,"reviews",id),{showOnHome:!current}); fetchReviews(); };
   const handleAddPlan = async (e:React.FormEvent) => { e.preventDefault(); await addDoc(collection(db,"plans"),{name:newPlan.name,price:newPlan.price,description:newPlan.description,features:newPlan.features.split(",").map(f=>f.trim())}); setNewPlan({name:"",price:0,description:"",features:""}); fetchPlans(); };
   const handleDeletePlan = async (id:string) => { await deleteDoc(doc(db,"plans",id)); fetchPlans(); };
@@ -162,10 +185,94 @@ export default function AdminDashboard() {
                   <td className="p-2 flex gap-2">
                     <button onClick={()=>handleToggleUser(u.uid,u.role)} className="px-2 py-1 bg-blue-500 text-white rounded">{u.role==="inactive"?"Activate":"Deactivate"}</button>
                     <button onClick={()=>handleDeleteUser(u.uid)} className="px-2 py-1 bg-red-500 text-white rounded">Delete</button>
+                    <button 
+  onClick={() => {
+    setEditingUser(u);
+    setEditForm({
+      fullName: u.fullName,
+      email: u.email,
+      role: u.role || "user",
+      plan: u.plan || "Free Plans"
+    });
+  }} 
+  className="px-2 py-1 bg-yellow-500 text-white rounded"
+>
+  Edit
+</button>
                   </td>
                 </tr>
               ))}</tbody>
             </table>
+            {editingUser && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+      <h3 className="text-xl font-bold mb-4">Edit User</h3>
+
+      <div className="space-y-3">
+        <input
+          type="text"
+          value={editForm.fullName}
+          onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
+          placeholder="Full Name"
+          className="w-full border p-2 rounded"
+        />
+        <input
+          type="email"
+          value={editForm.email}
+          onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+          placeholder="Email"
+          className="w-full border p-2 rounded"
+        />
+        <select
+          value={editForm.role}
+          onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+          className="w-full border p-2 rounded"
+        >
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <select
+          value={editForm.plan}
+          onChange={(e) => setEditForm({ ...editForm, plan: e.target.value })}
+          className="w-full border p-2 rounded"
+        >
+          <option value="Free Plans">Free Plans</option>
+          <option value="Basic">Basic</option>
+          <option value="Premium">Premium</option>
+        </select>
+      </div>
+
+      <div className="flex justify-end gap-2 mt-6">
+        <button 
+          onClick={() => setEditingUser(null)} 
+          className="px-4 py-2 bg-gray-300 rounded"
+        >
+          Cancel
+        </button>
+        <button 
+          onClick={async () => {
+            if (!editingUser) return;
+            await updateDoc(doc(db, "users", editingUser.uid), {
+              fullName: editForm.fullName,
+              email: editForm.email,
+              role: editForm.role,
+              plan: editForm.plan,
+            });
+            setUsers(prev =>
+              prev.map(u => u.uid === editingUser.uid ? { ...u, ...editForm } : u)
+            );
+            setEditingUser(null);
+          }}
+          className="px-4 py-2 bg-pink-600 text-white rounded"
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
           </section>
         )}
 
@@ -208,12 +315,110 @@ export default function AdminDashboard() {
               <button type="submit" className="px-3 py-1 bg-pink-600 text-white rounded">Add Plan</button>
             </form>
             <ul className="space-y-4">{plans.map(p=>(
-              <li key={p.id} className="p-4 border rounded flex justify-between items-center">
-                <div><p className="font-bold">{p.name} - ${p.price}</p><p>{p.description}</p>
-                <ul className="list-disc pl-5 text-sm text-gray-600">{p.features.map((f,i)=><li key={i}>{f}</li>)}</ul></div>
-                <button onClick={()=>handleDeletePlan(p.id)} className="px-3 py-1 bg-red-500 text-white rounded">Delete</button>
-              </li>
+<li key={p.id} className="p-4 border rounded flex justify-between items-center">
+  <div>
+    <p className="font-bold">{p.name} - ${p.price}</p>
+    <p>{p.description}</p>
+    <ul className="list-disc pl-5 text-sm text-gray-600">
+      {p.features.map((f, i) => <li key={i}>{f}</li>)}
+    </ul>
+  </div>
+
+  {/* Wrap buttons in a flex container */}
+  <div className="flex gap-2">
+    <button
+  onClick={async () => {
+    if (!confirm("Are you sure you want to delete this plan? This action cannot be undone.")) {
+      return;
+    }
+    await handleDeletePlan(p.id);
+  }}
+  className="px-3 py-1 bg-red-500 text-white rounded"
+>
+  Delete
+</button>
+
+    <button
+      onClick={() => {
+        setEditingPlan(p);
+        setEditPlanForm({
+          name: p.name,
+          price: p.price,
+          description: p.description,
+          features: p.features.join(", "),
+        });
+      }}
+      className="px-3 py-1 bg-yellow-500 text-white rounded"
+    >
+      Edit
+    </button>
+  </div>
+</li>
+
             ))}</ul>
+            {editingPlan && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+      <h3 className="text-xl font-bold mb-4">Edit Plan</h3>
+
+      <div className="space-y-3">
+        <input
+          type="text"
+          value={editPlanForm.name}
+          onChange={(e) => setEditPlanForm({ ...editPlanForm, name: e.target.value })}
+          placeholder="Plan Name"
+          className="w-full border p-2 rounded"
+        />
+        <input
+          type="number"
+          value={editPlanForm.price}
+          onChange={(e) => setEditPlanForm({ ...editPlanForm, price: Number(e.target.value) })}
+          placeholder="Price"
+          className="w-full border p-2 rounded"
+        />
+        <textarea
+          value={editPlanForm.description}
+          onChange={(e) => setEditPlanForm({ ...editPlanForm, description: e.target.value })}
+          placeholder="Description"
+          className="w-full border p-2 rounded"
+        />
+        <input
+          type="text"
+          value={editPlanForm.features}
+          onChange={(e) => setEditPlanForm({ ...editPlanForm, features: e.target.value })}
+          placeholder="Features (comma-separated)"
+          className="w-full border p-2 rounded"
+        />
+      </div>
+
+      <div className="flex justify-end gap-2 mt-6">
+        <button 
+          onClick={() => setEditingPlan(null)} 
+          className="px-4 py-2 bg-gray-300 rounded"
+        >
+          Cancel
+        </button>
+        <button 
+          onClick={async () => {
+            if (!editingPlan) return;
+            await updateDoc(doc(db, "plans", editingPlan.id), {
+              name: editPlanForm.name,
+              price: editPlanForm.price,
+              description: editPlanForm.description,
+              features: editPlanForm.features.split(",").map(f => f.trim())
+            });
+            setPlans(prev => prev.map(p => p.id === editingPlan.id ? { ...p, ...editPlanForm, features: editPlanForm.features.split(",").map(f => f.trim()) } : p));
+            setEditingPlan(null);
+          }}
+          className="px-4 py-2 bg-pink-600 text-white rounded"
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
           </section>
         )}
 
@@ -250,7 +455,19 @@ export default function AdminDashboard() {
                   {r.reviewData?(<div className="mt-2 p-2 border rounded bg-white"><p><strong>Review by:</strong> {r.reviewData.userName}</p><p>{r.reviewData.content}</p><p>{r.reviewData.title} ({r.reviewData.type})</p></div>):<p className="text-red-500 mt-2">Original review deleted</p>}
                   <div className="flex gap-2 mt-3">
                     <button onClick={()=>handleDeleteReport(r.id)} className="px-3 py-1 bg-red-500 text-white rounded">Delete Report</button>
-                    {r.reviewData && <button onClick={()=>handleDeleteReviewAndReport(r)} className="px-3 py-1 bg-red-700 text-white rounded">Delete Review & Report</button>}
+                    {r.reviewData && <button
+  onClick={async () => {
+    if (!confirm("Are you sure you want to delete this review and its report? This action cannot be undone.")) {
+      return;
+    }
+    await handleDeleteReviewAndReport(r);
+  }}
+  className="px-3 py-1 bg-red-700 text-white rounded"
+>
+  Delete Review & Report
+</button>
+
+                    }
                   </div>
                 </div>
               ))}</div>
