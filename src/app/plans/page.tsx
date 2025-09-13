@@ -17,6 +17,7 @@ interface Plan {
 export default function SubscriptionPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [isRegistered, setIsRegistered] = useState(false);
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
@@ -33,39 +34,41 @@ export default function SubscriptionPage() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) {
-        router.push("/login");
-        return;
-      }
-
       setUser(currentUser);
 
-      const userRef = doc(db, "users", currentUser.uid);
-      const userSnap = await getDoc(userRef);
+      if (currentUser) {
+        const userRef = doc(db, "users", currentUser.uid);
+        const userSnap = await getDoc(userRef);
 
-      let currentPlanName = "Free Plan"; // default
+        if (userSnap.exists()) {
+          setIsRegistered(true);
 
-      if (userSnap.exists()) {
-        const userData = userSnap.data();
-        if (userData.plan) {
-          currentPlanName = userData.plan;
-        } else {
-          await updateDoc(userRef, { plan: "Free Plan" }).catch(async () => {
-            await setDoc(userRef, { plan: "Free Plan" }, { merge: true });
+          let currentPlanName = "Free Plan";
+          const userData = userSnap.data();
+
+          if (userData.plan) {
+            currentPlanName = userData.plan;
+          } else {
+            await updateDoc(userRef, { plan: "Free Plan" }).catch(async () => {
+              await setDoc(userRef, { plan: "Free Plan" }, { merge: true });
+            });
+          }
+
+          await fetchPlans();
+
+          setPlans((prev) => {
+            const validPlan = prev.find((p) => p.name === currentPlanName);
+            setSelectedPlan(validPlan || null);
+            return prev;
           });
+        } else {
+          setIsRegistered(false);
+          await fetchPlans();
         }
       } else {
-        await setDoc(userRef, { plan: "Free Plan" });
+        setIsRegistered(false);
+        await fetchPlans();
       }
-
-      await fetchPlans();
-
-      setPlans((prev) => {
-        // find the plan object that matches the user's plan name
-        const validPlan = prev.find((p) => p.name === currentPlanName);
-        setSelectedPlan(validPlan || null);
-        return prev;
-      });
 
       setLoading(false);
     });
@@ -74,7 +77,11 @@ export default function SubscriptionPage() {
   }, [router]);
 
   const handleSelectPlan = async (plan: Plan) => {
-    if (!user) return;
+    if (!user || !isRegistered) {
+      alert("You must be a registered user to select a plan.");
+      return;
+    }
+
     setSelectedPlan(plan);
 
     const userRef = doc(db, "users", user.uid);
@@ -88,8 +95,7 @@ export default function SubscriptionPage() {
   };
 
   const handleCheckout = () => {
-    if (!selectedPlan) return;
-    // ✅ send plan.id, not plan.name
+    if (!selectedPlan || !isRegistered) return;
     router.push(`/checkout?plan=${encodeURIComponent(selectedPlan.id)}`);
   };
 
@@ -126,20 +132,26 @@ export default function SubscriptionPage() {
 
               <button
                 onClick={() => handleSelectPlan(plan)}
+                disabled={!isRegistered}
                 className={`w-full py-2 rounded-md font-semibold transition ${
-                  selectedPlan?.id === plan.id
+                  !isRegistered
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    : selectedPlan?.id === plan.id
                     ? "bg-pink-700 text-white"
                     : "bg-pink-600 text-white hover:bg-pink-700"
                 }`}
               >
-                {selectedPlan?.id === plan.id ? "Selected" : "Select Plan"}
+                {!isRegistered
+                  ? "Register to Select"
+                  : selectedPlan?.id === plan.id
+                  ? "Selected"
+                  : "Select Plan"}
               </button>
             </div>
           ))}
         </div>
 
-        {/* Checkout only for paid plans */}
-        {selectedPlan && !selectedPlan.isFree && (
+        {selectedPlan && !selectedPlan.isFree && isRegistered && (
           <div className="mt-10">
             <button
               onClick={handleCheckout}

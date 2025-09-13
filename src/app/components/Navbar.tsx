@@ -76,6 +76,7 @@ export default function Navbar() {
       <div className="space-x-6 flex items-center">
         <Link href="/" className="text-gray-700 hover:text-pink-500">Home</Link>
         <Link href="/about" className="text-gray-700 hover:text-pink-500">About</Link>
+        <Link href="/plans" className="text-gray-700 hover:text-pink-500">Subscription Plans</Link>
         <Link href="/contact" className="text-gray-700 hover:text-pink-500">Contact</Link>
         <Link href="/catalogue" className="text-gray-700 hover:text-pink-500">Catalogue</Link>
         <Link href="/faq" className="text-gray-700 hover:text-pink-500">FAQ</Link>
@@ -134,14 +135,6 @@ export default function Navbar() {
                           className="block px-4 py-2 text-gray-700 hover:bg-gray-100"
                         >
                           My Favourites
-                        </Link>
-                      )}
-                      {(role === "admin" || role === "user") && (
-                        <Link
-                          href="/plans"
-                          className="block px-4 py-2 text-gray-700 hover:bg-gray-100"
-                        >
-                          Subscription Plans
                         </Link>
                       )}
                       <button
