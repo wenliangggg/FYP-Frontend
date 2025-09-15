@@ -6,25 +6,29 @@ export default function TestPublishPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Utility to generate a unique ID
+  // Form state
+  const [title, setTitle] = useState("");
+  const [authors, setAuthors] = useState("");
+  const [categories, setCategories] = useState("");
+  const [synopsis, setSynopsis] = useState("");
+  const [thumbnail, setThumbnail] = useState("");
+
   const generateId = () => 'test-' + Date.now();
 
   const handlePublish = async () => {
     setLoading(true);
     setMessage(null);
 
-    // Generate unique ID & filename
     const id = generateId();
     const filename = `${id}.json`;
 
-    // Example book data
     const newBook = {
       id,
-      title: `Test Book ${id}`,
-      authors: ["John Doe"],
-      categories: ["juvenile_fiction"],
-      synopsis: "This is a test book for API testing",
-      thumbnail: "",
+      title,
+      authors: authors.split(",").map(a => a.trim()),
+      categories: categories.split(",").map(c => c.trim()),
+      synopsis,
+      thumbnail,
     };
 
     try {
@@ -32,8 +36,8 @@ export default function TestPublishPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          category: "books",   // folder in /content
-          filename,            // unique file
+          category: "books",
+          filename,
           content: newBook,
         }),
       });
@@ -42,6 +46,12 @@ export default function TestPublishPage() {
       if (res.ok) {
         setMessage(`✅ Publish successful! File: ${filename}`);
         console.log("GitHub response:", data);
+        // reset form
+        setTitle("");
+        setAuthors("");
+        setCategories("");
+        setSynopsis("");
+        setThumbnail("");
       } else {
         setMessage("❌ Publish failed: " + (data.error || JSON.stringify(data)));
       }
@@ -53,17 +63,82 @@ export default function TestPublishPage() {
   };
 
   return (
-    <div className="max-w-xl mx-auto mt-10 p-4">
-      <h1 className="text-xl font-bold mb-4">Test GitHub Publish API</h1>
-      <button
-        onClick={handlePublish}
-        disabled={loading}
-        className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
-      >
-        {loading ? "Publishing..." : "Publish Random Test Book"}
-      </button>
+    <section className="bg-white py-16 px-6">
+      <div className="max-w-xl mx-auto">
+        <h1 className="text-3xl font-bold text-pink-600 mb-6 text-center">
+          Publish Book to GitHub
+        </h1>
 
-      {message && <p className="mt-4">{message}</p>}
-    </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handlePublish();
+          }}
+          className="bg-white p-6 rounded-xl shadow-md border border-gray-200 space-y-4"
+        >
+          <input
+            type="text"
+            placeholder="Title"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-pink-400 focus:border-pink-400"
+            required
+          />
+          <input
+            type="text"
+            placeholder="Authors (comma separated)"
+            value={authors}
+            onChange={e => setAuthors(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-pink-400 focus:border-pink-400"
+            required
+          />
+          <input
+            type="text"
+            placeholder="Categories (comma separated)"
+            value={categories}
+            onChange={e => setCategories(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-pink-400 focus:border-pink-400"
+            required
+          />
+          <textarea
+            placeholder="Synopsis"
+            value={synopsis}
+            onChange={e => setSynopsis(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-pink-400 focus:border-pink-400"
+          />
+          <input
+            type="text"
+            placeholder="Thumbnail URL"
+            value={thumbnail}
+            onChange={e => setThumbnail(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-pink-400 focus:border-pink-400"
+          />
+
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full py-2 rounded-md font-semibold transition ${
+              loading
+                ? "bg-gray-400 text-white cursor-not-allowed"
+                : "bg-pink-600 text-white hover:bg-pink-700"
+            }`}
+          >
+            {loading ? "Publishing..." : "Publish Book"}
+          </button>
+        </form>
+
+        {message && (
+          <p
+            className={`mt-4 text-center font-medium ${
+              message.startsWith("✅")
+                ? "text-green-600"
+                : "text-red-500"
+            }`}
+          >
+            {message}
+          </p>
+        )}
+      </div>
+    </section>
   );
 }

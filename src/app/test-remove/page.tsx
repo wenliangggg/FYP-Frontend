@@ -13,6 +13,7 @@ export default function TestRemovePage() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [confirmFile, setConfirmFile] = useState<FileItem | null>(null);
 
   // fetch files whenever category changes
   useEffect(() => {
@@ -39,7 +40,6 @@ export default function TestRemovePage() {
   }, [category]);
 
   const handleRemove = async (file: FileItem) => {
-    setLoading(true);
     setMessage(null);
 
     try {
@@ -63,59 +63,102 @@ export default function TestRemovePage() {
     } catch (err: any) {
       setMessage("❌ Error: " + err.message);
     } finally {
-      setLoading(false);
+      setConfirmFile(null);
     }
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-xl font-bold">GitHub Content Manager</h1>
+    <section className="bg-white py-16 px-6">
+      <div className="max-w-2xl mx-auto">
+        <h1 className="text-3xl font-bold text-pink-600 mb-6 text-center">
+          GitHub Content Manager
+        </h1>
 
-      {/* Toggle category */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => setCategory("books")}
-          className={`px-4 py-2 rounded ${
-            category === "books" ? "bg-blue-600 text-white" : "bg-gray-200"
-          }`}
-        >
-          Books
-        </button>
-        <button
-          onClick={() => setCategory("videos")}
-          className={`px-4 py-2 rounded ${
-            category === "videos" ? "bg-blue-600 text-white" : "bg-gray-200"
-          }`}
-        >
-          Videos
-        </button>
-      </div>
-
-      {/* File list */}
-      {loading ? (
-        <p>Loading {category}...</p>
-      ) : (
-        <ul className="space-y-2">
-          {files.map((file) => (
-            <li
-              key={file.sha}
-              className="flex justify-between items-center border p-2 rounded"
+        {/* Toggle between Books / Videos */}
+        <div className="flex justify-center gap-4 mb-6">
+          {["books", "videos"].map((type) => (
+            <button
+              key={type}
+              onClick={() => setCategory(type as "books" | "videos")}
+              className={`px-4 py-2 rounded-md font-semibold transition ${
+                category === type
+                  ? "bg-pink-600 text-white"
+                  : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+              }`}
             >
-              <span>{file.name}</span>
-              <button
-                onClick={() => handleRemove(file)}
-                className="px-3 py-1 bg-red-600 text-white rounded text-sm"
-                disabled={loading}
-              >
-                Remove
-              </button>
-            </li>
+              {type.charAt(0).toUpperCase() + type.slice(1)}
+            </button>
           ))}
-          {files.length === 0 && <p>No {category} found.</p>}
-        </ul>
-      )}
+        </div>
 
-      {message && <p>{message}</p>}
-    </div>
+        {/* File list */}
+        {loading ? (
+          <p>Loading {category}...</p>
+        ) : (
+          <ul className="space-y-3">
+            {files.map((file) => (
+              <li
+                key={file.sha}
+                className="flex justify-between items-center border border-gray-200 p-3 rounded-md shadow-sm"
+              >
+                <span className="text-gray-800">{file.name}</span>
+                <button
+                  onClick={() => setConfirmFile(file)}
+                  className="px-3 py-1 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700"
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+            {files.length === 0 && (
+              <p className="text-gray-600 text-center">
+                No {category} found.
+              </p>
+            )}
+          </ul>
+        )}
+
+        {/* Confirmation Modal */}
+        {confirmFile && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl max-w-md w-full p-6 relative">
+              <h2 className="text-xl font-bold text-pink-600 mb-4">
+                Confirm Remove
+              </h2>
+              <p className="text-gray-700 mb-6">
+                Are you sure you want to remove{" "}
+                <span className="font-semibold">{confirmFile.name}</span>?  
+                This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleRemove(confirmFile)}
+                  className="w-full py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                >
+                  Yes, Remove
+                </button>
+                <button
+                  onClick={() => setConfirmFile(null)}
+                  className="w-full py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Message */}
+        {message && (
+          <p
+            className={`mt-6 text-center font-medium ${
+              message.startsWith("✅") ? "text-green-600" : "text-red-500"
+            }`}
+          >
+            {message}
+          </p>
+        )}
+      </div>
+    </section>
   );
 }

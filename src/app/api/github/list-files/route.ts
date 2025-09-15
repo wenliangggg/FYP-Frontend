@@ -7,7 +7,10 @@ const BRANCH = "main";
 
 export async function GET(req: Request) {
   try {
-    const folder = "content/books"; // or videos
+    const { searchParams } = new URL(req.url);
+    const category = searchParams.get("category") || "books"; // default books
+    const folder = `content/${category}`;
+
     const url = `https://api.github.com/repos/${REPO}/contents/${folder}?ref=${BRANCH}`;
 
     const res = await fetch(url, {
@@ -18,10 +21,8 @@ export async function GET(req: Request) {
     });
 
     const data = await res.json();
-
     if (!res.ok) throw new Error(data.message || "Failed to list files");
 
-    // Only return JSON files
     const files = data
       .filter((f: any) => f.type === "file" && f.name.endsWith(".json"))
       .map((f: any) => ({ name: f.name, path: f.path, sha: f.sha }));
