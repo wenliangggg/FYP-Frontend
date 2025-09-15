@@ -6,6 +6,7 @@ type FileItem = {
   name: string;
   path: string;
   sha: string;
+  title?: string; // <-- add optional title field
 };
 
 export default function TestRemovePage() {
@@ -15,20 +16,30 @@ export default function TestRemovePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [confirmFile, setConfirmFile] = useState<FileItem | null>(null);
 
-  // fetch files whenever category changes
+  // fetch files and titles whenever category changes
   useEffect(() => {
-    const fetchFiles = async () => {
+    const fetchFilesWithTitles = async () => {
       setLoading(true);
       setMessage(null);
 
       try {
         const res = await fetch(`/api/github/list-files?category=${category}`);
-        const data = await res.json();
-        if (res.ok) {
-          setFiles(data);
-        } else {
-          setMessage("❌ Failed to fetch files: " + data.error);
-        }
+        const filesData: FileItem[] = await res.json();
+
+        // fetch JSON content to get titles
+        const filesWithTitles = await Promise.all(
+          filesData.map(async (file) => {
+            try {
+              const fileRes = await fetch(`/api/github/get-file?path=${encodeURIComponent(file.path)}`);
+              const data = await fileRes.json();
+              return { ...file, title: data.title || file.name };
+            } catch {
+              return { ...file, title: file.name };
+            }
+          })
+        );
+
+        setFiles(filesWithTitles);
       } catch (err: any) {
         setMessage("❌ Error: " + err.message);
       } finally {
@@ -36,7 +47,7 @@ export default function TestRemovePage() {
       }
     };
 
-    fetchFiles();
+    fetchFilesWithTitles();
   }, [category]);
 
   const handleRemove = async (file: FileItem) => {
@@ -55,7 +66,7 @@ export default function TestRemovePage() {
 
       const data = await res.json();
       if (res.ok) {
-        setMessage(`✅ Removed ${file.name}`);
+        setMessage(`✅ Removed ${file.title || file.name}`);
         setFiles(files.filter((f) => f.name !== file.name));
       } else {
         setMessage("❌ Remove failed: " + data.error);
@@ -101,7 +112,7 @@ export default function TestRemovePage() {
                 key={file.sha}
                 className="flex justify-between items-center border border-gray-200 p-3 rounded-md shadow-sm"
               >
-                <span className="text-gray-800">{file.name}</span>
+                <span className="text-gray-800">{file.title || file.name}</span>
                 <button
                   onClick={() => setConfirmFile(file)}
                   className="px-3 py-1 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700"
@@ -127,7 +138,7 @@ export default function TestRemovePage() {
               </h2>
               <p className="text-gray-700 mb-6">
                 Are you sure you want to remove{" "}
-                <span className="font-semibold">{confirmFile.name}</span>?  
+                <span className="font-semibold">{confirmFile.title || confirmFile.name}</span>?  
                 This action cannot be undone.
               </p>
               <div className="flex gap-3">

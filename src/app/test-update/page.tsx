@@ -2,13 +2,55 @@
 
 import { useState, useEffect } from "react";
 
+const availableCategories = [
+  "Juvenile Fiction",
+  "Early Readers",
+  "Educational",
+  "Art",
+  "Entertainment"
+]; // Replace with your discovery categories
+
 export default function GitHubManager() {
   const [category, setCategory] = useState<"books" | "videos">("books");
   const [files, setFiles] = useState<any[]>([]);
+    const [title, setTitle] = useState("");
   const [selectedFile, setSelectedFile] = useState<any>(null);
   const [formData, setFormData] = useState<any>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  useEffect(() => {
+  const fetchFilesWithTitles = async () => {
+    try {
+      const res = await fetch(`/api/github/list-files?category=${category}`);
+      const filesData = await res.json();
+
+      // Fetch titles for each file
+      const filesWithTitles = await Promise.all(
+        filesData.map(async (file: any) => {
+          try {
+            const fileRes = await fetch(
+              `/api/github/get-file?path=${encodeURIComponent(file.path)}`
+            );
+            const data = await fileRes.json();
+            return { ...file, title: data.title || file.name };
+          } catch {
+            return { ...file, title: file.name };
+          }
+        })
+      );
+
+      setFiles(filesWithTitles);
+      setSelectedFile(null);
+      setFormData(null);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  fetchFilesWithTitles();
+}, [category]);
+
 
   // Fetch files for the selected category
   useEffect(() => {
@@ -25,18 +67,34 @@ export default function GitHubManager() {
     if (!selectedFile) return;
     fetch(`/api/github/get-file?path=${encodeURIComponent(selectedFile.path)}`)
       .then((res) => res.json())
-      .then((data) => setFormData(data))
+      .then((data) => {
+        // Ensure categories is an array
+        setFormData({
+          ...data,
+          categories: data.categories || [],
+        });
+      })
       .catch(console.error);
   }, [selectedFile]);
 
-  const handleFieldChange = (field: string, value: string) => {
+  const handleFieldChange = (field: string, value: string | string[]) => {
     setFormData((prev: any) => ({
       ...prev,
-      [field]:
-        field === "authors" || field === "categories"
-          ? value.split(",").map((v) => v.trim())
-          : value,
+      [field]: value,
     }));
+  };
+
+  const toggleCategory = (cat: string) => {
+    if (!formData) return;
+    const current = formData.categories || [];
+    if (current.includes(cat)) {
+      handleFieldChange(
+        "categories",
+        current.filter((c: string) => c !== cat)
+      );
+    } else {
+      handleFieldChange("categories", [...current, cat]);
+    }
   };
 
   const handleUpdate = async () => {
@@ -60,33 +118,6 @@ export default function GitHubManager() {
       const data = await res.json();
       if (res.ok) setMessage("✅ Update successful!");
       else setMessage("❌ Update failed: " + data.error);
-    } catch (err: any) {
-      setMessage("❌ Error: " + err.message);
-    }
-  };
-
-  const handleRemove = async () => {
-    if (!selectedFile) return alert("Select a file first");
-
-    setMessage(null);
-    try {
-      const res = await fetch("/api/github/remove", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category,
-          filename: selectedFile.name,
-          sha: selectedFile.sha,
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        setMessage("✅ Remove successful!");
-        setFiles(files.filter((f) => f.name !== selectedFile.name));
-        setSelectedFile(null);
-        setFormData(null);
-      } else setMessage("❌ Remove failed: " + data.error);
     } catch (err: any) {
       setMessage("❌ Error: " + err.message);
     }
@@ -116,31 +147,39 @@ export default function GitHubManager() {
           ))}
         </div>
 
-        {/* File List */}
-        <ul className="space-y-2 mb-6">
-          {files.map((file) => (
-            <li
-              key={file.sha}
-              onClick={() =>
-                setSelectedFile(
-                  selectedFile?.name === file.name ? null : file
-                )
-              }
-              className={`cursor-pointer p-3 rounded-md border transition ${
-                selectedFile?.name === file.name
-                  ? "bg-pink-100 border-pink-400 text-gray-900" 
-                  : "bg-white border-gray-300 hover:bg-gray-100 text-gray-900"
-              }`}
-            >
-              {file.name}
-            </li>
-          ))}
-          {files.length === 0 && (
-            <p className="text-center text-gray-800">
-              No {category} found.
-            </p>
-          )}
-        </ul>
+{/* File List */}
+<ul className="space-y-2 mb-6">
+  {files.map((file) => {
+    const isSelected = selectedFile?.name === file.name;
+    const displayTitle =
+      isSelected && formData?.title
+        ? formData.title
+        : file.name; // Fallback to filename
+
+    return (
+<li
+  key={file.sha}
+  onClick={() =>
+    setSelectedFile(selectedFile?.name === file.name ? null : file)
+  }
+  className={`cursor-pointer p-3 rounded-md border transition ${
+    selectedFile?.name === file.name
+      ? "bg-pink-100 border-pink-400 text-gray-900"
+      : "bg-white border-gray-300 hover:bg-gray-100 text-gray-900"
+  }`}
+>
+  {file.title} {/* now this will show the JSON title */}
+</li>
+
+    );
+  })}
+  {files.length === 0 && (
+    <p className="text-center text-gray-800">
+      No {category} found.
+    </p>
+  )}
+</ul>
+
 
         {/* Form Fields */}
         {formData && selectedFile && (
@@ -155,17 +194,29 @@ export default function GitHubManager() {
             <input
               type="text"
               value={formData.authors?.join(", ") || ""}
-              onChange={(e) => handleFieldChange("authors", e.target.value)}
+              onChange={(e) => handleFieldChange("authors", e.target.value.split(",").map(a => a.trim()))}
               placeholder="Authors (comma separated)"
               className="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-pink-400 focus:border-pink-400"
             />
-            <input
-              type="text"
-              value={formData.categories?.join(", ") || ""}
-              onChange={(e) => handleFieldChange("categories", e.target.value)}
-              placeholder="Categories (comma separated)"
-              className="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-pink-400 focus:border-pink-400"
-            />
+
+            {/* Categories as checkboxes */}
+            <div>
+              <p className="font-medium text-gray-800 mb-2">Categories:</p>
+              <div className="flex flex-wrap gap-2">
+                {availableCategories.map((cat) => (
+                  <label key={cat} className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.categories?.includes(cat)}
+                      onChange={() => toggleCategory(cat)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-gray-800">{cat}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <textarea
               value={formData.synopsis || ""}
               onChange={(e) => handleFieldChange("synopsis", e.target.value)}
