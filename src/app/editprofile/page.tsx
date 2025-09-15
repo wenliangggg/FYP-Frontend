@@ -152,34 +152,38 @@ export default function EditProfilePage() {
     }
   };
 
-  // Cancel plan
-  const handleCancelPlan = async () => {
-    if (!user) return;
-    if (!confirm("Are you sure you want to cancel your subscription?")) return;
+// Cancel plan
+const handleCancelPlan = async () => {
+  if (!user) return;
+  if (!confirm("Are you sure you want to cancel your subscription?")) return;
 
-    setCancelLoading(true);
-    try {
-      await updateDoc(doc(db, "users", user.uid), { plan: "Free Plans" });
-      setPlan("Free Plans");
+  setCancelLoading(true);
+  try {
+    const oldPlan = plan; // keep the current plan before changing it
 
-      await fetch("/api/cancel-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: user.email,
-          plan: "Free Plans",
-          method: "Subscription Cancellation",
-        }),
-      });
+    await updateDoc(doc(db, "users", user.uid), { plan: "Free Plans" });
+    setPlan("Free Plans");
 
-      alert("Your subscription has been cancelled.");
-    } catch (err: any) {
-      console.error("Cancel plan error:", err);
-      alert("Failed to cancel subscription.");
-    } finally {
-      setCancelLoading(false);
-    }
-  };
+    await fetch("/api/cancel-plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: user.email,
+        oldPlan, // send the previous plan
+        plan: "Free Plans",
+        method: "Subscription Cancellation",
+      }),
+    });
+
+    alert("Your subscription has been cancelled.");
+  } catch (err: any) {
+    console.error("Cancel plan error:", err);
+    alert("Failed to cancel subscription.");
+  } finally {
+    setCancelLoading(false);
+  }
+};
+
 
   if (loading) return <p className="text-center py-20">Loading...</p>;
 
@@ -368,9 +372,10 @@ export default function EditProfilePage() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-700 mb-6"
                 >
                   <option value="">Select Age Range</option>
-                  <option value="6-12">6–7</option>
-                  <option value="13-18">8–10</option>
-                  <option value="19-30">10-12</option>
+                  <option value="1-3">1–3</option>
+                  <option value="4-6">4–6</option>
+                  <option value="7-10">7–10</option>
+                  <option value="11-12">11-12</option>
                 </select>
               </div>
 

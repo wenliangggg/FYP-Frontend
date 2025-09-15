@@ -1,14 +1,22 @@
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
-
-const resend = new Resend('re_BvJ1BHo9_Ny5kpnYAFbsHfUwCdYbze9ro');
+import nodemailer from "nodemailer";
 
 export async function POST(req: Request) {
   try {
     const { email, oldPlan } = await req.json();
 
-    await resend.emails.send({
-      from: "Cancel_Plan@resend.dev", // must match a verified domain in Resend
+    // Gmail transporter with App Password
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.GMAIL_USER,           // your Gmail address
+        pass: process.env.GMAIL_APP_PASSWORD,   // your 16-char App Password
+      },
+    });
+
+    // Define email options
+    const mailOptions = {
+      from: `"My App" <${process.env.GMAIL_USER}>`,
       to: email,
       subject: "Subscription Canceled",
       html: `
@@ -21,7 +29,10 @@ export async function POST(req: Request) {
           <a href="http://localhost:3000/plans">Manage Plans</a>.
         </p>
       `,
-    });
+    };
+
+    // Send email
+    await transporter.sendMail(mailOptions);
 
     return NextResponse.json({ success: true });
   } catch (error) {

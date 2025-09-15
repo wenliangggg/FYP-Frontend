@@ -1,5 +1,7 @@
 'use client';
 
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import {
@@ -45,12 +47,12 @@ export default function AdminDashboard() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<"users"|"reviews"|"contacts"|"plans"|"subscriptions"|"reports"|"reportedContent">("users");
+  const [activeTab, setActiveTab] = useState<"users"|"reviews"|"contacts"|"plans"|"subscriptions"|"reports"|"reportedContent"|"analytics">("users");
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [editForm, setEditForm] = useState({ fullName: "", email: "", role: "", plan: "" });
   const [editingPlan, setEditingPlan] = useState<PlanData | null>(null);
   const [editPlanForm, setEditPlanForm] = useState({ name: "", price: 0, description: "", features: "" });
-
+  const [subscriptions, setSubscriptions] = useState<any[]>([]);
   const [newPlan, setNewPlan] = useState({ name: "", price: 0, description: "", features: "" });
 
   // ---------------- Fetch Functions ----------------
@@ -65,20 +67,26 @@ export default function AdminDashboard() {
     setPlanSummary(Object.entries(counts).map(([plan,count])=>({plan,count})));
   };
 
+
   const fetchReviews = async () => {
     const snap = await getDocs(collection(db, "reviews"));
     setReviews(snap.docs.map(doc => ({ ...(doc.data() as ReviewData), uid: doc.id })));
   };
+
+// ---------------- Contact Fetch ----------------
 
   const fetchContacts = async () => {
     const snap = await getDocs(collection(db, "contacts"));
     setContacts(snap.docs.map(doc => ({ ...(doc.data() as ContactData), uid: doc.id })));
   };
 
+  // ---------------- Plans Fetch ----------------
+
   const fetchPlans = async () => {
     const snap = await getDocs(collection(db, "plans"));
     setPlans(snap.docs.map(doc => ({ ...(doc.data() as PlanData), id: doc.id })));
   };
+// ---------------- Reports Fetch ----------------
 
   const fetchReports = async () => {
     const snap = await getDocs(collection(db, "reports"));
@@ -97,6 +105,8 @@ export default function AdminDashboard() {
     }
     setReports(temp);
   };
+
+  // ---------------- Report Content Fetch ----------------
 
   const fetchReportedContent = async () => {
     const snap = await getDocs(collection(db, "reports-contents"));
@@ -127,6 +137,8 @@ const handleToggleUser = async (uid: string, role?: string) => {
   );
 };
 
+
+
   const handleToggleShowOnHome = async (id:string,current:boolean) => { await updateDoc(doc(db,"reviews",id),{showOnHome:!current}); fetchReviews(); };
   const handleAddPlan = async (e:React.FormEvent) => { e.preventDefault(); await addDoc(collection(db,"plans"),{name:newPlan.name,price:newPlan.price,description:newPlan.description,features:newPlan.features.split(",").map(f=>f.trim())}); setNewPlan({name:"",price:0,description:"",features:""}); fetchPlans(); };
   const handleDeletePlan = async (id:string) => { await deleteDoc(doc(db,"plans",id)); fetchPlans(); };
@@ -134,23 +146,116 @@ const handleToggleUser = async (uid: string, role?: string) => {
   const handleDeleteReviewAndReport = async (report:Report) => { await deleteDoc(doc(db,"reports",report.id)); if(report.reviewData) await deleteDoc(doc(db,"books-video-reviews",report.reviewId!)); setReports(prev=>prev.filter(r=>r.id!==report.id)); };
   const exportCSV = () => { if(!planSummary.length) return; const header=["Plan","Active Users"]; const rows=planSummary.map(p=>[p.plan,p.count]); const csv=[header,...rows].map(e=>e.join(",")).join("\n"); const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const link=document.createElement("a"); link.href=url; link.setAttribute("download","subscription_report.csv"); link.click(); URL.revokeObjectURL(url); };
 
-  // ---------------- Auth + Init ----------------
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      setCurrentUser(u);
-      if(u){
-        const snap = await getDoc(doc(db,"users",u.uid));
-        const role = snap.exists()?snap.data()?.role:null;
-        if(role==="admin") await Promise.all([fetchUsers(),fetchReviews(),fetchContacts(),fetchPlans(),fetchReports(),fetchReportedContent()]);
-        else setError("You do not have permission to view this page.");
-      }
-      setLoading(false);
-    });
-    return ()=>unsub();
-  },[]);
+// Export PDF
 
-  if(loading) return <p className="p-6">Loading...</p>;
-  if(error) return <p className="p-6 text-red-600">{error}</p>;
+const fetchSubscriptions = async () => {
+  const snapshot = await getDocs(collection(db, "users"));
+  const subsList = snapshot.docs.map((docSnap) => ({
+    id: docSnap.id,
+    ...docSnap.data(),
+  }));
+  setSubscriptions(subsList);
+};
+
+useEffect(() => {
+  fetchSubscriptions();
+}, []);
+
+
+const exportPDF = () => {
+  if (!subscriptions.length) return;
+
+  const doc = new jsPDF();
+  doc.setFontSize(18);
+  doc.text("Subscriptions Report", 14, 20);
+
+  const tableColumn = ["Name", "Email", "Plan", "Start Date", "Status"];
+  const tableRows: any[] = [];
+
+  subscriptions.forEach((sub) => {
+    tableRows.push([
+      sub.fullName || "N/A",
+      sub.email || "N/A",
+      sub.plan || "Free Plan",
+      sub.startDate
+        ? new Date(sub.startDate.seconds * 1000).toLocaleDateString()
+        : "N/A",
+      sub.status || "Active",
+    ]);
+  });
+
+  autoTable(doc, {
+    head: [tableColumn],
+    body: tableRows,
+    startY: 30,
+  });
+
+  doc.save("subscriptions-report.pdf");
+};
+
+const calculateMRR = (subscriptions: any[], plans: PlanData[]) => {
+  let mrr = 0;
+  subscriptions.forEach((sub) => {
+    const plan = plans.find((p) => p.name === sub.plan);
+    if (plan) {
+      mrr += plan.price;
+    }
+  });
+  return mrr;
+};
+
+const calculateChurn = (subscriptions: any[]) => {
+  const total = subscriptions.length;
+  const churned = subscriptions.filter((s) => s.status === "canceled").length;
+  return total > 0 ? ((churned / total) * 100).toFixed(2) : "0.00";
+};
+
+
+
+  // ---------------- Auth + Init ----------------
+useEffect(() => {
+  const unsub = onAuthStateChanged(auth, (u) => {
+    setCurrentUser(u);
+  });
+
+  return () => unsub();
+}, []);
+
+// Fetch all admin data after currentUser is set
+useEffect(() => {
+  if (!currentUser) return;
+
+  const fetchAdminData = async () => {
+    setLoading(true);
+    try {
+      const snap = await getDoc(doc(db, "users", currentUser.uid));
+      const role = snap.exists() ? snap.data()?.role : null;
+
+      if (role !== "admin") {
+        setError("You do not have permission to view this page.");
+        return;
+      }
+
+      await Promise.all([
+        fetchUsers(),
+        fetchReviews(),
+        fetchContacts(),
+        fetchPlans(),
+        fetchReports(),
+        fetchReportedContent(),
+      ]);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to fetch admin data.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchAdminData();
+}, [currentUser]);
+
+
 
   // ---------------- Render ----------------
   return (
@@ -158,11 +263,16 @@ const handleToggleUser = async (uid: string, role?: string) => {
       {/* Sidebar */}
       <aside className="w-64 mr-8 border-r border-gray-200">
         <ul className="space-y-2">
-          {["users","reviews","contacts","plans","subscriptions","reports","reportedContent"].map(tab=>(
-            <li key={tab} className={`cursor-pointer px-4 py-2 rounded ${activeTab===tab?"bg-pink-100 font-semibold":"hover:bg-gray-100"}`} onClick={()=>setActiveTab(tab as any)}>
-              {tab.charAt(0).toUpperCase()+tab.slice(1)}
-            </li>
-          ))}
+         {["users","reviews","contacts","plans","subscriptions","reports","reportedContent","analytics"].map(tab => (
+  <li 
+    key={tab} 
+    className={`cursor-pointer px-4 py-2 rounded ${activeTab===tab?"bg-pink-100 font-semibold":"hover:bg-gray-100"}`} 
+    onClick={()=>setActiveTab(tab as any)}
+  >
+    {tab.charAt(0).toUpperCase()+tab.slice(1)}
+  </li>
+))}
+
         </ul>
       </aside>
 
@@ -426,12 +536,37 @@ const handleToggleUser = async (uid: string, role?: string) => {
         {activeTab==="subscriptions" && (
           <section>
             <h2 className="text-2xl font-bold text-pink-600 mb-6 flex items-center gap-2"><MdSubscriptions/> Subscriptions</h2>
+ {/* KPI Cards */}
+  <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+    <div className="p-4 bg-white border rounded shadow text-center">
+      <p className="text-gray-500">Total Users</p>
+      <p className="text-xl font-bold">{subscriptions.length}</p>
+    </div>
+    <div className="p-4 bg-white border rounded shadow text-center">
+      <p className="text-gray-500">Active Plans</p>
+      <p className="text-xl font-bold">{planSummary.length}</p>
+    </div>
+    <div className="p-4 bg-white border rounded shadow text-center">
+      <p className="text-gray-500">MRR</p>
+      <p className="text-xl font-bold text-green-600">
+        ${calculateMRR(subscriptions, plans)}
+      </p>
+    </div>
+    <div className="p-4 bg-white border rounded shadow text-center">
+      <p className="text-gray-500">Churn Rate</p>
+      <p className="text-xl font-bold text-red-600">
+        {calculateChurn(subscriptions)}%
+      </p>
+    </div>
+  </div>
+
             {planSummary.length===0?<p>No subscriptions yet.</p>:(
               <>
                 <div className="grid md:grid-cols-3 gap-6 mb-12">{planSummary.map((p,i)=>(
                   <div key={i} className="p-6 bg-white border rounded shadow text-center"><h3 className="font-bold">{p.plan}</h3><p className="text-2xl text-pink-600">{p.count}</p></div>
                 ))}</div>
                 <button onClick={exportCSV} className="mb-6 px-4 py-2 bg-pink-600 text-white rounded">Export CSV</button>
+                <button onClick={exportPDF} className="mb-6 ml-2 px-4 py-2 bg-purple-600 text-white rounded" > Export PDF </button>
                 <div className="h-[400px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart><Pie data={planSummary} dataKey="count" nameKey="plan" outerRadius={120} label>{planSummary.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}</Pie><Tooltip/><Legend/></PieChart>
@@ -456,17 +591,16 @@ const handleToggleUser = async (uid: string, role?: string) => {
                   <div className="flex gap-2 mt-3">
                     <button onClick={()=>handleDeleteReport(r.id)} className="px-3 py-1 bg-red-500 text-white rounded">Delete Report</button>
                     {r.reviewData && <button
-  onClick={async () => {
-    if (!confirm("Are you sure you want to delete this review and its report? This action cannot be undone.")) {
-      return;
-    }
-    await handleDeleteReviewAndReport(r);
-  }}
-  className="px-3 py-1 bg-red-700 text-white rounded"
->
-  Delete Review & Report
-</button>
-
+                      onClick={async () => {
+                        if (!confirm("Are you sure you want to delete this review and its report? This action cannot be undone.")) {
+                          return;
+                        }
+                        await handleDeleteReviewAndReport(r);
+                      }}
+                      className="px-3 py-1 bg-red-700 text-white rounded"
+                    >
+                      Delete Review & Report
+                    </button>
                     }
                   </div>
                 </div>
@@ -492,6 +626,15 @@ const handleToggleUser = async (uid: string, role?: string) => {
             )}
           </section>
         )}
+
+        {/* Analytics */}
+{activeTab === "analytics" && (
+  <section>
+    <h2 className="text-2xl font-bold text-pink-600 mb-6">Analytics Dashboard</h2>
+
+  </section>
+)}
+
 
       </section>
     </main>

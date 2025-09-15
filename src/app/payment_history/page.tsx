@@ -4,6 +4,44 @@ import { useEffect, useState } from "react";
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import jsPDF from "jspdf";
+
+function generateInvoice(subscription: any, user: any) {
+  const doc = new jsPDF();
+
+  // Header
+  doc.setFontSize(20);
+  doc.text("Invoice", 14, 20);
+
+  // User Info
+  doc.setFontSize(12);
+  doc.text(`Customer: ${user?.email}`, 14, 40);
+  doc.text(`Invoice Date: ${new Date().toLocaleDateString()}`, 14, 50);
+
+  // Subscription Info
+  doc.text("Subscription Details:", 14, 70);
+  doc.text(`Plan: ${subscription.plan}`, 14, 80);
+  doc.text(`Amount: $${subscription.amount.toFixed(2)}`, 14, 90);
+  doc.text(`Status: ${subscription.status}`, 14, 100);
+  doc.text(
+    `Created At: ${
+      subscription.createdAt?.toDate
+        ? subscription.createdAt.toDate().toLocaleString()
+        : subscription.createdAt
+    }`,
+    14,
+    110
+  );
+
+  // Footer
+  doc.setFontSize(10);
+  doc.text("Thank you for your subscription!", 14, 140);
+
+  // Save PDF
+  doc.save(`invoice_${subscription.plan}_${Date.now()}.pdf`);
+}
+
+
 
 interface Subscription {
   plan: string;
@@ -106,6 +144,7 @@ export default function PaymentHistoryPage() {
                   <th className="px-6 py-3 text-left text-sm font-semibold text-gray-800">Amount</th>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-gray-800">Status</th>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-gray-800">Date</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-800">Invoice</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -122,6 +161,14 @@ export default function PaymentHistoryPage() {
                       {sub.createdAt?.toDate
                         ? sub.createdAt.toDate().toLocaleString()
                         : sub.createdAt}
+                    </td>
+                    <td className="px-6 py-3 text-gray-700">
+                      <button
+                        onClick={() => generateInvoice(sub, user)}
+                        className="bg-pink-600 text-white px-3 py-1 rounded hover:bg-pink-700 transition"
+                      >
+                        Download Invoice
+                      </button>
                     </td>
                   </tr>
                 ))}
