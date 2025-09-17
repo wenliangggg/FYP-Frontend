@@ -1,0 +1,624 @@
+"use client";
+
+import { useState, useEffect } from "react";
+
+/* ------------------ TYPES ------------------ */
+type CategoryType = "books" | "videos";
+
+interface FileItem {
+  name: string;
+  path: string;
+  sha: string;
+  title?: string;
+}
+
+/* ------------------ DISCOVERY CATEGORIES ------------------ */
+const DISCOVERY_CATEGORIES = [
+  "Juvenile Fiction",
+  "Early Readers",
+  "Educational",
+  "Art",
+  "Entertainment",
+];
+
+/* ------------------ MAIN PAGE ------------------ */
+export default function ContentManagerPage() {
+  const [activeTab, setActiveTab] = useState<"publish" | "update" | "remove">(
+    "publish"
+  );
+
+  return (
+    <section className="bg-gray-100 min-h-screen flex">
+      {/* Sidebar */}
+      <aside className="w-64 bg-white shadow-md p-6 flex flex-col">
+        <h2 className="text-xl font-bold text-pink-600 mb-6">
+          Content Manager
+        </h2>
+        <nav className="flex flex-col gap-2">
+          {(["publish", "update", "remove"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-left rounded-md font-semibold transition ${
+                activeTab === tab
+                  ? "bg-pink-600 text-white"
+                  : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 p-8">
+        {activeTab === "publish" && <PublishForm />}
+        {activeTab === "update" && <UpdateForm />}
+        {activeTab === "remove" && <RemoveForm />}
+      </main>
+    </section>
+  );
+}
+
+/* ------------------ PUBLISH FORM ------------------ */
+function PublishForm() {
+  const [category, setCategory] = useState<CategoryType>("books");
+  const [title, setTitle] = useState("");
+  const [authors, setAuthors] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [synopsis, setSynopsis] = useState("");
+  const [thumbnail, setThumbnail] = useState("");
+  const [link, setLink] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const generateId = () => title.trim().replace(/\s+/g, "-");
+
+  const handleCategoryToggle = (cat: string) => {
+    setSelectedCategories((prev) =>
+      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+    );
+  };
+
+  const handlePublish = async () => {
+    setLoading(true);
+    setMessage(null);
+
+    const id = generateId();
+    const filename = `${id}.json`;
+
+    const newItem = {
+      id,
+      title,
+      authors: authors.split(",").map((a) => a.trim()),
+      categories: selectedCategories,
+      synopsis,
+      thumbnail,
+      link,
+    };
+
+    try {
+      const res = await fetch("/api/github/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category, filename, content: newItem }),
+      });
+
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { error: "Invalid JSON response", details: text };
+      }
+
+      if (!res.ok) {
+        setMessage(`❌ Publish failed: ${data.error}\n${data.details || ""}`);
+      } else {
+        setMessage(`✅ Published ${filename} in ${category}`);
+        setTitle("");
+        setAuthors("");
+        setSelectedCategories([]);
+        setSynopsis("");
+        setThumbnail("");
+        setLink("");
+      }
+    } catch (err: any) {
+      setMessage("❌ Error: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+        <section className="bg-white py-16 px-6 max-w-3xl mx-auto rounded-xl shadow-md border space-y-6">
+      <h2 className="text-2xl font-bold text-pink-600 mb-4 text-center">
+        Publish Content
+      </h2>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        handlePublish();
+      }}
+      className="bg-white p-6 rounded-xl shadow-md border border-gray-200 space-y-4 max-w-3xl mx-auto text-gray-800"
+    >
+      <CategoryToggle category={category} setCategory={setCategory} />
+
+      <input
+        type="text"
+        placeholder="Title"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="w-full px-4 py-2 border rounded-md text-gray-800"
+        required
+      />
+      <input
+        type="text"
+        placeholder="Authors (comma separated)"
+        value={authors}
+        onChange={(e) => setAuthors(e.target.value)}
+        className="w-full px-4 py-2 border rounded-md text-gray-800"
+        required
+      />
+
+      <CheckboxGroup selected={selectedCategories} toggle={handleCategoryToggle} />
+
+      <textarea
+        placeholder="Synopsis"
+        value={synopsis}
+        onChange={(e) => setSynopsis(e.target.value)}
+        className="w-full px-4 py-2 border rounded-md text-gray-800"
+      />
+      <input
+        type="text"
+        placeholder="Thumbnail URL"
+        value={thumbnail}
+        onChange={(e) => setThumbnail(e.target.value)}
+        className="w-full px-4 py-2 border rounded-md"
+      />
+      <input
+        type="url"
+        placeholder="Book / Video Link"
+        value={link}
+        onChange={(e) => setLink(e.target.value)}
+        className="w-full px-4 py-2 border rounded-md"
+      />
+
+      <button
+        type="submit"
+        disabled={loading}
+        className={`w-full py-2 rounded-md font-semibold transition ${
+          loading
+            ? "bg-gray-400 text-white cursor-not-allowed"
+            : "bg-pink-600 text-white hover:bg-pink-700"
+        }`}
+      >
+        {loading ? "Publishing..." : "Publish"}
+      </button>
+
+      {message && <ResponseMessage message={message} />}
+    </form>
+    </section>
+  );
+}
+
+/* ------------------ UPDATE FORM ------------------ */
+function UpdateForm() {
+  const availableCategories = DISCOVERY_CATEGORIES;
+
+  const [category, setCategory] = useState<CategoryType>("books");
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
+  const [formData, setFormData] = useState<any>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  // Load files + titles
+  useEffect(() => {
+    const fetchFiles = async () => {
+      try {
+        const res = await fetch(`/api/github/list-files?category=${category}`);
+        const filesData: FileItem[] = await res.json();
+
+        const filesWithTitles = await Promise.all(
+          filesData.map(async (file) => {
+            try {
+              const fileRes = await fetch(
+                `/api/github/get-file?path=${encodeURIComponent(file.path)}`
+              );
+              const data = await fileRes.json();
+              return { ...file, title: data.title || file.name };
+            } catch {
+              return { ...file, title: file.name };
+            }
+          })
+        );
+
+        setFiles(filesWithTitles);
+        setSelectedFile(null);
+        setFormData(null);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchFiles();
+  }, [category]);
+
+  // Fetch selected file content
+  useEffect(() => {
+    if (!selectedFile) return;
+    fetch(`/api/github/get-file?path=${encodeURIComponent(selectedFile.path)}`)
+      .then((res) => res.json())
+      .then((data) =>
+        setFormData({
+          ...data,
+          categories: data.categories || [],
+        })
+      )
+      .catch(console.error);
+  }, [selectedFile]);
+
+  const handleFieldChange = (field: string, value: string | string[]) => {
+    setFormData((prev: any) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const toggleCategory = (cat: string) => {
+    if (!formData) return;
+    const current = formData.categories || [];
+    handleFieldChange(
+      "categories",
+      current.includes(cat)
+        ? current.filter((c: string) => c !== cat)
+        : [...current, cat]
+    );
+  };
+
+  const handleUpdate = async () => {
+    if (!selectedFile || !formData) return alert("Select a file first");
+
+    setShowConfirm(false);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/github/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category,
+          filename: selectedFile.name,
+          content: formData,
+          sha: selectedFile.sha,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) setMessage("✅ Update successful!");
+      else setMessage("❌ Update failed: " + data.error);
+    } catch (err: any) {
+      setMessage("❌ Error: " + err.message);
+    }
+  };
+
+  return (
+    <section className="bg-white py-16 px-6 max-w-3xl mx-auto rounded-xl shadow-md border space-y-6">
+      <h2 className="text-2xl font-bold text-pink-600 mb-4 text-center">
+        Update Content
+      </h2>
+
+      <CategoryToggle category={category} setCategory={setCategory} />
+
+      {/* File List */}
+      <ul className="space-y-2 mb-6">
+        {files.map((file) => (
+          <li
+            key={file.sha}
+            onClick={() =>
+              setSelectedFile(selectedFile?.name === file.name ? null : file)
+            }
+            className={`cursor-pointer p-3 rounded-md border transition ${
+              selectedFile?.name === file.name
+                ? "bg-pink-100 border-pink-400 text-gray-900"
+                : "bg-white border-gray-300 hover:bg-gray-100 text-gray-900"
+            }`}
+          >
+            {file.title}
+          </li>
+        ))}
+        {files.length === 0 && <p>No {category} found.</p>}
+      </ul>
+
+      {/* Edit Form */}
+      {formData && selectedFile && (
+        <form className="space-y-4">
+          <input
+            type="text"
+            value={formData.title || ""}
+            onChange={(e) => handleFieldChange("title", e.target.value)}
+            placeholder="Title"
+            className="w-full px-4 py-2 border rounded-md text-gray-800"
+          />
+          <input
+            type="text"
+            value={formData.authors?.join(", ") || ""}
+            onChange={(e) =>
+              handleFieldChange(
+                "authors",
+                e.target.value.split(",").map((a) => a.trim())
+              )
+            }
+            placeholder="Authors"
+            className="w-full px-4 py-2 border rounded-md text-gray-800"
+          />
+
+          <div>
+            <p className="font-medium mb-2 text-gray-800">Categories:</p>
+            <div className="flex flex-wrap gap-2">
+              {availableCategories.map((cat) => (
+                <label
+                  key={cat}
+                  onClick={() => toggleCategory(cat)}
+                  className={`px-3 py-1 border rounded-md cursor-pointer transition ${
+                    formData.categories?.includes(cat)
+                      ? "bg-pink-600 text-white border-pink-600"
+                      : "bg-gray-200 text-gray-800 border-gray-300 hover:bg-gray-300"
+                  }`}
+                >
+                  {cat}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <textarea
+            value={formData.synopsis || ""}
+            onChange={(e) => handleFieldChange("synopsis", e.target.value)}
+            placeholder="Synopsis"
+            className="w-full px-4 py-2 border rounded-md text-gray-800"
+          />
+          <input
+            type="text"
+            value={formData.thumbnail || ""}
+            onChange={(e) => handleFieldChange("thumbnail", e.target.value)}
+            placeholder="Thumbnail URL"
+            className="w-full px-4 py-2 border rounded-md text-gray-800"
+          />
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setShowConfirm(true)}
+              className="w-full py-2 bg-pink-600 text-white rounded-md hover:bg-pink-700"
+            >
+              Update
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-pink-600 mb-4">Confirm Update</h3>
+            <p className="mb-6">
+              Save changes to <strong>{selectedFile?.name}</strong>?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleUpdate}
+                className="w-full py-2 bg-pink-600 text-white rounded-md hover:bg-pink-700"
+              >
+                Yes, Save
+              </button>
+              <button
+                onClick={() => setShowConfirm(false)}
+                className="w-full py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {message && <ResponseMessage message={message} />}
+    </section>
+  );
+}
+
+/* ------------------ REMOVE FORM ------------------ */
+function RemoveForm() {
+  const [category, setCategory] = useState<CategoryType>("books");
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
+  const [confirmFile, setConfirmFile] = useState<FileItem | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchFiles = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/github/list-files?category=${category}`);
+        const filesData: FileItem[] = await res.json();
+
+        const filesWithTitles = await Promise.all(
+          filesData.map(async (file) => {
+            try {
+              const fileRes = await fetch(
+                `/api/github/get-file?path=${encodeURIComponent(file.path)}`
+              );
+              const data = await fileRes.json();
+              return { ...file, title: data.title || file.name };
+            } catch {
+              return { ...file, title: file.name };
+            }
+          })
+        );
+        setFiles(filesWithTitles);
+      } catch (err) {
+        setMessage("❌ Failed to load files");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchFiles();
+  }, [category]);
+
+  const handleRemove = async (file: FileItem) => {
+    setMessage(null);
+    try {
+      const res = await fetch("/api/github/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category,
+          filename: file.name,
+          sha: file.sha,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage(`✅ Removed ${file.title || file.name}`);
+        setFiles(files.filter((f) => f.name !== file.name));
+      } else {
+        setMessage("❌ Remove failed: " + data.error);
+      }
+    } catch (err: any) {
+      setMessage("❌ Error: " + err.message);
+    } finally {
+      setConfirmFile(null);
+    }
+  };
+
+  return (
+    <section className="bg-white py-16 px-6 max-w-3xl mx-auto rounded-xl shadow-md border space-y-6">
+      <h2 className="text-2xl font-bold text-pink-600 mb-4 text-center">
+        Remove Content
+      </h2>
+
+      <CategoryToggle category={category} setCategory={setCategory} />
+
+      {loading ? (
+        <p>Loading {category}...</p>
+      ) : (
+        <ul className="space-y-3">
+          {files.map((file) => (
+            <li
+              key={file.sha}
+              className="flex justify-between items-center border border-gray-200 p-3 rounded-md shadow-sm text-gray-800"
+            >
+              <span>{file.title || file.name}</span>
+              <button
+                onClick={() => setConfirmFile(file)}
+                className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700"
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+          {files.length === 0 && <p>No {category} found.</p>}
+        </ul>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmFile && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 text-gray-800">
+            <h3 className="text-xl font-bold text-pink-600 mb-4">Confirm Remove</h3>
+            <p className="mb-6">
+              Are you sure you want to remove <strong>{confirmFile.title || confirmFile.name}</strong>?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleRemove(confirmFile)}
+                className="w-full py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+              >
+                Yes, Remove
+              </button>
+              <button
+                onClick={() => setConfirmFile(null)}
+                className="w-full py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {message && <ResponseMessage message={message} />}
+    </section>
+  );
+}
+
+/* ------------------ REUSABLE COMPONENTS ------------------ */
+function CategoryToggle({
+  category,
+  setCategory,
+}: {
+  category: CategoryType;
+  setCategory: (cat: CategoryType) => void;
+}) {
+  return (
+    <div className="flex justify-center gap-4 mb-6">
+      {(["books", "videos"] as CategoryType[]).map((type) => (
+        <button
+          key={type}
+          onClick={() => setCategory(type)}
+          className={`px-4 py-2 rounded-md font-semibold transition ${
+            category === type
+              ? "bg-pink-600 text-white"
+              : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+          }`}
+        >
+          {type.charAt(0).toUpperCase() + type.slice(1)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CheckboxGroup({
+  selected,
+  toggle,
+}: {
+  selected: string[];
+  toggle: (cat: string) => void;
+}) {
+  return (
+    <div>
+      <p className="font-medium mb-2">Categories:</p>
+      <div className="flex flex-wrap gap-2">
+        {DISCOVERY_CATEGORIES.map((cat) => (
+          <label
+            key={cat}
+            onClick={() => toggle(cat)}
+            className={`px-3 py-1 border rounded-md cursor-pointer transition ${
+              selected.includes(cat)
+                ? "bg-pink-600 text-white border-pink-600"
+                : "bg-gray-200 text-gray-800 border-gray-300 hover:bg-gray-300"
+            }`}
+          >
+            {cat}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ResponseMessage({ message }: { message: string }) {
+  return (
+    <p
+      className={`mt-4 text-center font-medium ${
+        message.startsWith("✅") ? "text-green-600" : "text-red-500"
+      }`}
+    >
+      {message}
+    </p>
+  );
+}
