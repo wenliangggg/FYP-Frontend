@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
+<<<<<<< HEAD
     "lib": ["dom", "dom.iterable", "esnext"],
+=======
+    "lib": ["dom", "dom.iterable", "esnext", "es2021"],
+>>>>>>> chatbot-integration
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -22,6 +26,10 @@
       "@/*": ["./src/*"]
     }
   },
+<<<<<<< HEAD
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "src/utills/firebaseConfig.js", "src/utills/firestore.js" , "src/types/**/*.d.ts", "**/*.d.ts", "global.d.ts", "dialogflow.d.ts"],
+=======
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "src/utills/firebaseConfig.js", "src/utills/firestore.js" , "src/types/**/*.d.ts", "**/*.d.ts", "global.d.ts", "dialogflow.d.ts", "types/**/*.d.ts"],
+>>>>>>> chatbot-integration
   "exclude": ["node_modules"]
 }

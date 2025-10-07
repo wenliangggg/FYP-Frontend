@@ -2,6 +2,12 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ClientLayout from "./ClientLayout";
+<<<<<<< HEAD
+=======
+import DialogflowMessenger from "./components/DialogflowMessenger";
+// (optional) import ResetChatButton from "@/app/components/ResetChatButton";
+
+>>>>>>> chatbot-integration
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,6 +33,10 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ClientLayout>{children}</ClientLayout>
+<<<<<<< HEAD
+=======
+        <DialogflowMessenger />
+>>>>>>> chatbot-integration
       </body>
     </html>
   );

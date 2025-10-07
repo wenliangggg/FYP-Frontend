@@ -14,3 +14,8 @@ if (!admin.apps.length) {
 }
 
 export default admin;
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> chatbot-integration
